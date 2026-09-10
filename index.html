@@ -1,906 +1,1085 @@
 <!DOCTYPE html>
-<html lang="sk" class="h-full bg-slate-950 text-slate-100 dark">
+<html lang="sk">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tactical Night Vision Camera Pro - 1080p/60fps & 4K</title>
-
-    <!-- Tailwind CSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Font Awesome Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-
-    <!-- Google Fonts: Orbitron & Inter -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Orbitron:wght@400;600;800;900&display=swap" rel="stylesheet">
-
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                        hud: ['Orbitron', 'monospace'],
-                    },
-                    colors: {
-                        nvg: {
-                            green: '#00ff41',
-                            darkgreen: '#003b00',
-                            amber: '#ffb000',
-                            cyan: '#00f3ff',
-                            thermal: '#ff2a00'
-                        }
-                    },
-                    boxShadow: {
-                        'glow-green': '0 0 20px rgba(0, 255, 65, 0.4)',
-                        'glow-amber': '0 0 20px rgba(255, 176, 0, 0.4)',
-                        'glow-cyan': '0 0 20px rgba(0, 243, 255, 0.4)',
-                        'glow-red': '0 0 20px rgba(255, 42, 0, 0.5)',
-                    }
-                }
-            }
-        }
-    </script>
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Pro Night Vision Camera</title>
     <style>
-        /* Scanlines and screen noise overlay */
-        .scanlines {
-            background: linear-gradient(
-                to bottom,
-                rgba(255,255,255,0),
-                rgba(255,255,255,0) 50%,
-                rgba(0, 0, 0, 0.3) 50%,
-                rgba(0, 0, 0, 0.3)
-            );
-            background-size: 100% 4px;
+        :root {
+            --nvg-color: #39ff14;
+            --nvg-glow: rgba(57, 255, 20, 0.4);
+            --ui-yellow: #f5d142;
+            --ui-bg: rgba(10, 15, 10, 0.65);
+            --ui-border: rgba(255, 255, 255, 0.18);
+            --ui-blur: blur(20px);
         }
 
-        .vignette {
-            background: radial-gradient(circle, transparent 55%, rgba(0,0,0,0.85) 100%);
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
         }
 
-        .crt-flicker {
-            animation: flicker 0.15s infinite;
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, monospace;
+            color: #fff;
         }
 
-        @keyframes flicker {
-            0% { opacity: 0.98; }
-            50% { opacity: 1; }
-            100% { opacity: 0.97; }
+        #app-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            background: #000;
         }
 
-        /* Custom Range Slider */
-        input[type=range] {
-            accent-color: #00ff41;
+        /* Viewport Canvas */
+        #viewport {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            object-fit: cover;
         }
 
-        /* Hide Scrollbar for clean tactical look */
-        ::-webkit-scrollbar {
-            width: 4px;
-            height: 4px;
+        /* Taktický HUD & Optický overlay */
+        .tactical-overlay {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 4;
+            background: radial-gradient(circle at center, transparent 60%, rgba(0, 0, 0, 0.75) 100%);
+            box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.8);
         }
-        ::-webkit-scrollbar-track {
-            background: rgba(0,0,0,0.5);
+
+        /* Zameriavací kríž v strede */
+        .reticle {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 160px;
+            height: 160px;
+            pointer-events: none;
+            z-index: 5;
+            opacity: 0.4;
+            transition: opacity 0.3s;
         }
-        ::-webkit-scrollbar-thumb {
-            background: #00ff41;
-            border-radius: 2px;
+
+        .reticle::before, .reticle::after {
+            content: '';
+            position: absolute;
+            background: var(--nvg-color);
+            box-shadow: 0 0 6px var(--nvg-glow);
+        }
+        .reticle::before { top: 50%; left: 10px; right: 10px; height: 1px; transform: translateY(-50%); }
+        .reticle::after { left: 50%; top: 10px; bottom: 10px; width: 1px; transform: translateX(-50%); }
+
+        .reticle-circle {
+            position: absolute;
+            inset: 25px;
+            border: 1px dashed var(--nvg-color);
+            border-radius: 50%;
+            animation: spin 30s linear infinite;
+        }
+
+        .reticle-corners {
+            position: absolute;
+            inset: 0;
+            border: 2px solid transparent;
+            border-top-color: var(--nvg-color);
+            border-bottom-color: var(--nvg-color);
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* Top Bar Controls */
+        .top-bar {
+            position: absolute;
+            top: env(safe-area-inset-top, 20px);
+            left: 0;
+            right: 0;
+            z-index: 10;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 20px;
+        }
+
+        .top-left-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--ui-bg);
+            backdrop-filter: var(--ui-blur);
+            -webkit-backdrop-filter: var(--ui-blur);
+            border: 1px solid var(--ui-border);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: var(--nvg-color);
+            text-shadow: 0 0 8px var(--nvg-glow);
+        }
+
+        .top-left-status .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--nvg-color);
+            box-shadow: 0 0 8px var(--nvg-color);
+            animation: pulse-dot 1.5s infinite ease-in-out;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.8); }
+        }
+
+        .btn-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--ui-bg);
+            backdrop-filter: var(--ui-blur);
+            -webkit-backdrop-filter: var(--ui-blur);
+            border: 1px solid var(--ui-border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-icon:hover {
+            border-color: var(--nvg-color);
+            box-shadow: 0 0 12px var(--nvg-glow);
+        }
+
+        .btn-icon:active {
+            transform: scale(0.92);
+        }
+
+        .btn-icon svg {
+            width: 20px;
+            height: 20px;
+            fill: #fff;
+            filter: drop-shadow(0 0 2px rgba(255,255,255,0.5));
+        }
+
+        /* Quick Color Bar (Bočný pás na rýchlu zmenu farby NVG) */
+        .color-palette-bar {
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background: var(--ui-bg);
+            backdrop-filter: var(--ui-blur);
+            -webkit-backdrop-filter: var(--ui-blur);
+            padding: 10px 7px;
+            border-radius: 24px;
+            border: 1px solid var(--ui-border);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+        }
+
+        .color-chip {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            position: relative;
+        }
+
+        .color-chip:hover, .color-chip.active {
+            transform: scale(1.25);
+            border-color: #fff;
+            box-shadow: 0 0 12px currentColor;
+        }
+
+        .color-picker-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            background: conic-gradient(red, yellow, lime, aqua, blue, magenta, red);
+        }
+
+        .color-picker-btn input[type="color"] {
+            position: absolute;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+
+        /* Top Settings Drawer */
+        .settings-drawer {
+            position: absolute;
+            top: calc(env(safe-area-inset-top, 20px) + 52px);
+            right: 20px;
+            z-index: 15;
+            background: rgba(12, 16, 14, 0.88);
+            backdrop-filter: var(--ui-blur);
+            -webkit-backdrop-filter: var(--ui-blur);
+            border: 1px solid var(--ui-border);
+            border-radius: 18px;
+            padding: 14px 16px;
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+            min-width: 220px;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.8), 0 0 1px 1px var(--nvg-glow);
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .settings-drawer.active {
+            display: flex;
+        }
+
+        .drawer-title {
+            font-size: 11px;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            color: var(--nvg-color);
+            font-weight: 800;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding-bottom: 6px;
+        }
+
+        .setting-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.85);
+        }
+
+        .setting-item select {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #fff;
+            padding: 5px 8px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 600;
+            outline: none;
+            cursor: pointer;
+        }
+
+        .setting-item select:focus {
+            border-color: var(--nvg-color);
+        }
+
+        /* HUD Overlay (Night Vision Data) */
+        .hud-overlay {
+            position: absolute;
+            top: 75px;
+            left: 20px;
+            z-index: 5;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--nvg-color);
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            text-shadow: 0 0 6px var(--nvg-glow);
+            letter-spacing: 0.8px;
+        }
+
+        /* Zoom Controls */
+        .zoom-picker {
+            position: absolute;
+            bottom: 140px;
+            z-index: 10;
+            display: flex;
+            gap: 8px;
+            background: var(--ui-bg);
+            backdrop-filter: var(--ui-blur);
+            -webkit-backdrop-filter: var(--ui-blur);
+            padding: 4px 10px;
+            border-radius: 24px;
+            border: 1px solid var(--ui-border);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+
+        .zoom-btn {
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 12px;
+            font-weight: 700;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .zoom-btn.active {
+            color: #000;
+            background: var(--nvg-color);
+            box-shadow: 0 0 10px var(--nvg-glow);
+        }
+
+        /* Bottom Control Panel */
+        .bottom-panel {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 10;
+            padding: 15px 30px calc(env(safe-area-inset-bottom, 20px) + 15px) 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            background: linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.6) 65%, transparent 100%);
+        }
+
+        /* Mode Selector */
+        .mode-selector {
+            display: flex;
+            gap: 24px;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+        }
+
+        .mode-btn {
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.4);
+            cursor: pointer;
+            padding: 4px 8px;
+            text-transform: uppercase;
+            transition: all 0.25s ease;
+        }
+
+        .mode-btn.active {
+            color: var(--nvg-color);
+            text-shadow: 0 0 10px var(--nvg-glow);
+        }
+
+        /* Shutter Row */
+        .shutter-row {
+            width: 100%;
+            max-width: 400px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 10px;
+        }
+
+        .gallery-preview {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.05);
+            border: 2px solid var(--ui-border);
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            transition: transform 0.15s ease;
+        }
+
+        .gallery-preview:active {
+            transform: scale(0.92);
+        }
+
+        .gallery-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* iOS / Military Shutter Button */
+        .shutter-button {
+            width: 76px;
+            height: 76px;
+            border-radius: 50%;
+            border: 3.5px solid #fff;
+            padding: 4px;
+            background: transparent;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 20px rgba(255,255,255,0.2);
+            transition: transform 0.12s ease, border-color 0.2s ease;
+        }
+
+        .shutter-button:active {
+            transform: scale(0.93);
+        }
+
+        .shutter-inner {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: #fff;
+            transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .shutter-button.recording {
+            border-color: #ff3b30;
+            box-shadow: 0 0 25px rgba(255, 59, 48, 0.6);
+        }
+
+        .shutter-button.recording .shutter-inner {
+            background: #ff3b30;
+            border-radius: 12px;
+            transform: scale(0.5);
+        }
+
+        .camera-flip {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: var(--ui-bg);
+            backdrop-filter: var(--ui-blur);
+            -webkit-backdrop-filter: var(--ui-blur);
+            border: 1px solid var(--ui-border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform 0.15s ease, border-color 0.2s ease;
+        }
+
+        .camera-flip:hover {
+            border-color: var(--nvg-color);
+        }
+
+        .camera-flip:active {
+            transform: scale(0.92) rotate(180deg);
+        }
+
+        .camera-flip svg {
+            width: 24px;
+            height: 24px;
+            fill: #fff;
+        }
+
+        /* REC Indicator */
+        .rec-indicator {
+            position: absolute;
+            top: env(safe-area-inset-top, 20px);
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            background: rgba(255, 40, 40, 0.9);
+            padding: 5px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 800;
+            display: none;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 0 15px rgba(255, 59, 48, 0.7);
+            letter-spacing: 1px;
+        }
+
+        .rec-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #fff;
+            animation: blink 0.8s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.2; }
+        }
+
+        /* Landscape Optimizations */
+        @media (orientation: landscape) {
+            .zoom-picker {
+                bottom: auto;
+                right: 120px;
+                top: 50%;
+                transform: translateY(-50%);
+                flex-direction: column;
+            }
+
+            .color-palette-bar {
+                left: 20px;
+            }
+
+            .bottom-panel {
+                width: 115px;
+                height: 100%;
+                right: 0;
+                left: auto;
+                top: 0;
+                padding: 20px;
+                flex-direction: row;
+                justify-content: center;
+                background: linear-gradient(to left, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.5) 70%, transparent 100%);
+            }
+
+            .shutter-row {
+                flex-direction: column;
+                height: 100%;
+                max-height: 320px;
+            }
+
+            .mode-selector {
+                position: absolute;
+                left: -80px;
+                top: 50%;
+                transform: translateY(-50%) rotate(-90deg);
+            }
         }
     </style>
 </head>
-<body class="h-full flex flex-col font-sans overflow-hidden select-none bg-slate-950 text-slate-100">
+<body>
 
-    <!-- TOP HUD HEADER BAR -->
-    <header class="h-14 border-b border-slate-800 bg-slate-900/80 backdrop-blur px-4 flex items-center justify-between z-30 shrink-0">
-        <div class="flex items-center gap-3">
-            <div class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></div>
-            <h1 class="font-hud font-extrabold text-sm sm:text-base tracking-wider text-emerald-400 flex items-center gap-2">
-                <i class="fa-solid fa-eye text-emerald-400"></i> NVG-ULTRA <span class="text-xs font-normal text-slate-400 hidden sm:inline">| TACTICAL VISION 1080p/4K</span>
-            </h1>
-        </div>
+<div id="app-container">
+    <!-- WebGL Viewport -->
+    <canvas id="viewport"></canvas>
 
-        <div class="flex items-center gap-2 sm:gap-4 font-hud text-xs text-slate-300">
-            <!-- Mode indicator -->
-            <div id="hdr-mode-badge" class="px-2 py-1 rounded bg-emerald-950 border border-emerald-500/40 text-emerald-400 font-semibold tracking-wider">
-                NIGHT GREEN
-            </div>
-
-            <!-- Resolution Selector -->
-            <div class="flex items-center gap-1 bg-slate-800/80 rounded px-2 py-1 border border-slate-700">
-                <i class="fa-solid fa-video text-slate-400 text-xs"></i>
-                <select id="resSelect" class="bg-transparent text-xs text-slate-200 outline-none cursor-pointer">
-                    <option value="720p" class="bg-slate-900 text-slate-200">720p HD</option>
-                    <option value="1080p60" selected class="bg-slate-900 text-slate-200">1080p 60FPS</option>
-                    <option value="4K" class="bg-slate-900 text-slate-200">4K Ultra HD</option>
-                </select>
-            </div>
-
-            <!-- Format Aspect Ratio Switcher -->
-            <div class="flex items-center bg-slate-800 rounded p-0.5 border border-slate-700">
-                <button id="aspect169" class="px-2 py-0.5 rounded text-xs bg-emerald-500 text-slate-950 font-bold transition">16:9 (YT)</button>
-                <button id="aspect916" class="px-2 py-0.5 rounded text-xs text-slate-400 hover:text-white transition">9:16 (Shorts)</button>
-            </div>
-
-            <button id="btnFullscreen" class="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">
-                <i class="fa-solid fa-expand"></i>
-            </button>
-        </div>
-    </header>
-
-    <!-- MAIN WORKSPACE -->
-    <div class="flex-1 relative flex overflow-hidden">
-        
-        <!-- CANVAS / CAMERA VIEWFINDER CONTAINER -->
-        <div class="flex-1 relative bg-black flex items-center justify-center overflow-hidden">
-            
-            <!-- Dynamic Wrapper for Aspect Ratio scaling -->
-            <div id="viewfinderWrapper" class="relative w-full h-full flex items-center justify-center transition-all duration-300">
-                
-                <!-- Video Element (Hidden source) -->
-                <video id="webcam" autoplay playsinline muted class="hidden"></video>
-
-                <!-- Processing Canvas -->
-                <canvas id="canvasOut" class="max-w-full max-h-full object-contain shadow-2xl rounded-sm"></canvas>
-
-                <!-- HUD OVERLAY LAYER -->
-                <div id="hudOverlay" class="absolute inset-0 pointer-events-none flex flex-col justify-between p-4 sm:p-6 crt-flicker">
-                    
-                    <!-- Vignette & Scanline visual filter -->
-                    <div id="hudVignette" class="absolute inset-0 vignette scanlines pointer-events-none"></div>
-
-                    <!-- HUD Top Status -->
-                    <div class="relative z-10 flex justify-between items-start font-hud text-xs text-emerald-400/90 tracking-widest">
-                        <div class="space-y-1 bg-slate-950/60 p-2 rounded border border-emerald-500/20 backdrop-blur-sm">
-                            <div class="flex items-center gap-2">
-                                <span class="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
-                                <span id="recordingTimer" class="font-mono text-red-400 font-bold text-sm">00:00:00</span>
-                                <span id="recDot" class="text-red-500 font-bold opacity-0">● REC</span>
-                            </div>
-                            <div>ISO: <span id="hudIsoVal">12800</span> HIGH-GAIN</div>
-                            <div>IR ILLUM: <span id="hudIrState" class="text-emerald-300">BOOST 200%</span></div>
-                        </div>
-
-                        <!-- Target Crosshair Center Widget -->
-                        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-40">
-                            <div class="w-32 h-32 border border-emerald-500/40 rounded-full flex items-center justify-center relative">
-                                <div class="w-4 h-4 border-t-2 border-l-2 border-emerald-400 absolute top-0 left-0"></div>
-                                <div class="w-4 h-4 border-t-2 border-r-2 border-emerald-400 absolute top-0 right-0"></div>
-                                <div class="w-4 h-4 border-b-2 border-l-2 border-emerald-400 absolute bottom-0 left-0"></div>
-                                <div class="w-4 h-4 border-b-2 border-r-2 border-emerald-400 absolute bottom-0 right-0"></div>
-                                <div class="w-1.5 h-1.5 bg-emerald-400 rounded-full"></div>
-                            </div>
-                        </div>
-
-                        <div class="text-right space-y-1 bg-slate-950/60 p-2 rounded border border-emerald-500/20 backdrop-blur-sm">
-                            <div>FPS: <span id="hudFps">60</span></div>
-                            <div>X-RAY GLOW: <span id="hudGlowState" class="text-emerald-300">ACTIVE</span></div>
-                            <div id="hudClock">00:00:00 UTC</div>
-                        </div>
-                    </div>
-
-                    <!-- Bottom HUD Telemetry -->
-                    <div class="relative z-10 flex justify-between items-end font-hud text-xs text-emerald-400/80">
-                        <div class="space-y-1 bg-slate-950/60 p-2 rounded border border-emerald-500/20 backdrop-blur-sm">
-                            <div>ELEV: <span id="hudElev">142m</span></div>
-                            <div>SENSITIVITY: <span id="hudGainVal">2.5x</span></div>
-                        </div>
-
-                        <!-- Pitch/Roll Compass Scale -->
-                        <div class="hidden md:flex flex-col items-center gap-1">
-                            <div class="w-48 h-5 border-b border-emerald-500/40 flex justify-between px-1 text-[10px]">
-                                <span>W</span><span>NW</span><span>N</span><span>NE</span><span>E</span>
-                            </div>
-                            <div class="text-[10px] tracking-widest text-emerald-400/70">COMPASS 354° N</div>
-                        </div>
-
-                        <div class="space-y-1 text-right bg-slate-950/60 p-2 rounded border border-emerald-500/20 backdrop-blur-sm">
-                            <div>SPECTRUM: <span id="hudSpectrumName">NIGHT PHOSPHOR</span></div>
-                            <div>BATTERY: <span id="hudBattery">98%</span> <i class="fa-solid fa-battery-full text-emerald-400"></i></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Toast / Notification Center -->
-                <div id="toast" class="absolute top-6 left-1/2 -translate-x-1/2 bg-slate-900/90 text-emerald-400 border border-emerald-500/50 px-4 py-2 rounded-lg font-hud text-xs shadow-glow-green opacity-0 transition-opacity duration-300 z-50 pointer-events-none flex items-center gap-2">
-                    <i class="fa-solid fa-circle-info"></i> <span id="toastMsg">Systém pripravený</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- CONTROL PANEL SIDEBAR -->
-        <aside id="sidebar" class="w-80 border-l border-slate-800 bg-slate-900/95 backdrop-blur flex flex-col z-20 transition-all duration-300 overflow-y-auto">
-            
-            <div class="p-4 border-b border-slate-800 flex items-center justify-between">
-                <h2 class="font-hud font-bold text-sm tracking-wider text-slate-200 flex items-center gap-2">
-                    <i class="fa-solid fa-sliders text-emerald-400"></i> OVLÁDANIE KAMERY
-                </h2>
-                <button id="toggleSidebar" class="sm:hidden text-slate-400 hover:text-white">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
-            </div>
-
-            <!-- CAMERA SOURCE & TORCH -->
-            <div class="p-4 border-b border-slate-800/80 space-y-3">
-                <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Zdroj Vstupu & Blesk</label>
-                <div class="flex gap-2">
-                    <select id="cameraSelect" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
-                        <option value="">Načítavam kamery...</option>
-                    </select>
-                    <button id="btnTorch" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-300 hover:text-yellow-400 transition" title="IR Blesk / Svietidlo">
-                        <i class="fa-solid fa-bolt"></i>
-                    </button>
-                </div>
-            </div>
-
-            <!-- VISION MODES PRESETS -->
-            <div class="p-4 border-b border-slate-800/80 space-y-3">
-                <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Nočné & Termálne Režimy</label>
-                
-                <div class="grid grid-cols-2 gap-2">
-                    <button data-mode="green" class="mode-btn px-3 py-2 rounded-lg bg-emerald-950/80 border border-emerald-500/60 text-emerald-400 font-hud text-xs font-semibold flex items-center gap-2 justify-center hover:bg-emerald-900/60 transition shadow-glow-green">
-                        <i class="fa-solid fa-eye"></i> Green NVG
-                    </button>
-                    
-                    <button data-mode="thermal" class="mode-btn px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-hud text-xs font-semibold flex items-center gap-2 justify-center hover:bg-slate-700 transition">
-                        <i class="fa-solid fa-fire"></i> FLIR Thermal
-                    </button>
-
-                    <button data-mode="xray" class="mode-btn px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-hud text-xs font-semibold flex items-center gap-2 justify-center hover:bg-slate-700 transition">
-                        <i class="fa-solid fa-person-rays"></i> Wall X-Ray
-                    </button>
-
-                    <button data-mode="amber" class="mode-btn px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-hud text-xs font-semibold flex items-center gap-2 justify-center hover:bg-slate-700 transition">
-                        <i class="fa-solid fa-sun"></i> Amber Vision
-                    </button>
-
-                    <button data-mode="cyber" class="mode-btn px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-hud text-xs font-semibold flex items-center gap-2 justify-center hover:bg-slate-700 transition">
-                        <i class="fa-solid fa-atom"></i> Cyber Blue
-                    </button>
-
-                    <button data-mode="ir_bw" class="mode-btn px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-hud text-xs font-semibold flex items-center gap-2 justify-center hover:bg-slate-700 transition">
-                        <i class="fa-solid fa-moon"></i> IR Mono
-                    </button>
-                </div>
-            </div>
-
-            <!-- FINE TUNING SLIDERS -->
-            <div class="p-4 border-b border-slate-800/80 space-y-4">
-                <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Úprava Obrazu v Tme & Svietivosti</label>
-                
-                <!-- Pitch Dark Sensitivity (Amplification) -->
-                <div class="space-y-1">
-                    <div class="flex justify-between text-xs text-slate-300">
-                        <span>Zosilnenie v tme (Gain / Sensitivity)</span>
-                        <span id="gainValText" class="text-emerald-400 font-mono">2.5x</span>
-                    </div>
-                    <input id="sliderGain" type="range" min="1.0" max="5.0" step="0.1" value="2.5" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer">
-                </div>
-
-                <!-- Wall / Glow Thermal Aura Intensity -->
-                <div class="space-y-1">
-                    <div class="flex justify-between text-xs text-slate-300">
-                        <span>Detekcia & Glow Sviečkovanie</span>
-                        <span id="glowValText" class="text-emerald-400 font-mono">70%</span>
-                    </div>
-                    <input id="sliderGlow" type="range" min="0" max="100" value="70" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer">
-                </div>
-
-                <!-- Digital Grain Noise -->
-                <div class="space-y-1">
-                    <div class="flex justify-between text-xs text-slate-300">
-                        <span>Šum senzora (Digital Grain)</span>
-                        <span id="noiseValText" class="text-emerald-400 font-mono">25%</span>
-                    </div>
-                    <input id="sliderNoise" type="range" min="0" max="100" value="25" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer">
-                </div>
-
-                <!-- Contrast / Exposure Boost -->
-                <div class="space-y-1">
-                    <div class="flex justify-between text-xs text-slate-300">
-                        <span>Kontrast & Expozícia</span>
-                        <span id="contrastValText" class="text-emerald-400 font-mono">1.4x</span>
-                    </div>
-                    <input id="sliderContrast" type="range" min="0.8" max="3.0" step="0.1" value="1.4" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer">
-                </div>
-            </div>
-
-            <!-- HUD VISUAL TOGGLES -->
-            <div class="p-4 border-b border-slate-800/80 space-y-2">
-                <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Efekty a Vzhľad HUD</label>
-
-                <label class="flex items-center justify-between text-xs text-slate-300 cursor-pointer p-1.5 hover:bg-slate-800/50 rounded">
-                    <span>Taktická HUD Mriežka</span>
-                    <input id="chkHud" type="checkbox" checked class="rounded bg-slate-800 border-slate-700 text-emerald-500 focus:ring-0">
-                </label>
-
-                <label class="flex items-center justify-between text-xs text-slate-300 cursor-pointer p-1.5 hover:bg-slate-800/50 rounded">
-                    <span>Scanlines (CRT Efekt)</span>
-                    <input id="chkScanlines" type="checkbox" checked class="rounded bg-slate-800 border-slate-700 text-emerald-500 focus:ring-0">
-                </label>
-
-                <label class="flex items-center justify-between text-xs text-slate-300 cursor-pointer p-1.5 hover:bg-slate-800/50 rounded">
-                    <span>Zvukový Zvlnený Zvuk NVG (Hum)</span>
-                    <input id="chkAudioHum" type="checkbox" class="rounded bg-slate-800 border-slate-700 text-emerald-500 focus:ring-0">
-                </label>
-            </div>
-
-            <!-- RECORDING & CAPTURE CONTROLS -->
-            <div class="p-4 mt-auto space-y-3 bg-slate-900/90 border-t border-slate-800">
-                <div class="grid grid-cols-2 gap-2">
-                    <!-- Photo Snapshot -->
-                    <button id="btnSnapshot" class="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-hud text-xs font-bold flex items-center justify-center gap-2 border border-slate-700 transition">
-                        <i class="fa-solid fa-camera text-emerald-400 text-base"></i> FOTO
-                    </button>
-
-                    <!-- Record Video -->
-                    <button id="btnRecord" class="px-4 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl font-hud text-xs font-bold flex items-center justify-center gap-2 shadow-glow-red transition">
-                        <i class="fa-solid fa-video text-base"></i> <span id="recBtnLabel">NAHRAŤ</span>
-                    </button>
-                </div>
-
-                <!-- Preview / Recorded Video Modal Trigger -->
-                <div id="recordingResultBox" class="hidden p-3 bg-slate-800/90 border border-emerald-500/40 rounded-xl flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                        <i class="fa-solid fa-circle-check text-emerald-400"></i>
-                        <span class="text-xs text-slate-200 font-semibold">Video Pripravené!</span>
-                    </div>
-                    <a id="downloadVideoBtn" download="night_vision_capture.webm" class="px-3 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded text-xs transition">
-                        <i class="fa-solid fa-download"></i> Stiahnuť
-                    </a>
-                </div>
-            </div>
-
-        </aside>
-
+    <!-- Taktické prvky overlayu (Vinetácia a Zameriavač) -->
+    <div class="tactical-overlay"></div>
+    <div class="reticle">
+        <div class="reticle-circle"></div>
+        <div class="reticle-corners"></div>
     </div>
 
-    <script>
-        // Global Application State
-        const state = {
-            mode: 'green', // green, thermal, xray, amber, cyber, ir_bw
-            aspect: '16:9', // 16:9 or 9:16
-            res: '1080p60', // 720p, 1080p60, 4K
-            gain: 2.5,
-            glow: 70,
-            noise: 25,
-            contrast: 1.4,
-            hudVisible: true,
-            scanlinesVisible: true,
-            audioHum: false,
-            isRecording: false,
-            recordingTime: 0,
-            mediaRecorder: null,
-            recordedChunks: [],
-            torchOn: false,
-            streamTrack: null,
-            audioCtx: null,
-            humOsc: null,
-            humGain: null
-        };
+    <!-- Recording Status -->
+    <div class="rec-indicator" id="recIndicator">
+        <div class="rec-dot"></div>
+        <span id="recTimer">00:00</span>
+    </div>
 
-        // DOM Element Cache
-        const video = document.getElementById('webcam');
-        const canvas = document.getElementById('canvasOut');
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        const cameraSelect = document.getElementById('cameraSelect');
-        const resSelect = document.getElementById('resSelect');
-        const aspect169 = document.getElementById('aspect169');
-        const aspect916 = document.getElementById('aspect916');
-        const btnRecord = document.getElementById('btnRecord');
-        const recBtnLabel = document.getElementById('recBtnLabel');
-        const btnSnapshot = document.getElementById('btnSnapshot');
-        const btnTorch = document.getElementById('btnTorch');
-        const toast = document.getElementById('toast');
-        const toastMsg = document.getElementById('toastMsg');
-        const hudOverlay = document.getElementById('hudOverlay');
-        const hudVignette = document.getElementById('hudVignette');
-        const recordingTimer = document.getElementById('recordingTimer');
-        const recDot = document.getElementById('recDot');
-        const recordingResultBox = document.getElementById('recordingResultBox');
-        const downloadVideoBtn = document.getElementById('downloadVideoBtn');
-        const hudFps = document.getElementById('hudFps');
-        const hudClock = document.getElementById('hudClock');
+    <!-- HUD Overlay Info -->
+    <div class="hud-overlay">
+        <div>SYS: OPTIC-ONLINE</div>
+        <div id="hudFPS">FPS: 60</div>
+        <div id="hudMode">PALETTE: NVG GREEN</div>
+        <div id="hudGain">GAIN: +12dB</div>
+    </div>
 
-        let frameCount = 0;
-        let lastFpsTime = performance.now();
-        let recordingInterval = null;
+    <!-- Top Action Controls -->
+    <div class="top-bar">
+        <div class="top-left-status">
+            <div class="status-dot"></div>
+            <span>NVG LIVE</span>
+        </div>
+        <button class="btn-icon" id="btnSettings" aria-label="Settings">
+            <svg viewBox="0 0 24 24"><path d="M4 8h4V4H4v4zm6 12h4v-4h-4v4zm-6 0h4v-4H4v4zm0-6h4v-4H4v4zm6 0h4v-4h-4v4zm6-10v4h4V4h-4zm-6 4h4V4h-4v4zm6 6h4v-4h-4v4zm0 6h4v-4h-4v4z"/></svg>
+        </button>
+    </div>
 
-        function updateCanvasResolution() {
-            let width = 1920;
-            let height = 1080;
+    <!-- Quick Color Swatches Bar -->
+    <div class="color-palette-bar">
+        <div class="color-chip active" style="background: #39ff14; color: #39ff14;" data-rgb="0.22, 1.0, 0.08" title="Phosphor Green"></div>
+        <div class="color-chip" style="background: #00e5ff; color: #00e5ff;" data-rgb="0.0, 0.9, 1.0" title="White Phosphor Cyan"></div>
+        <div class="color-chip" style="background: #ffaa00; color: #ffaa00;" data-rgb="1.0, 0.65, 0.0" title="Amber Vision"></div>
+        <div class="color-chip" style="background: #ff1e42; color: #ff1e42;" data-rgb="1.0, 0.1, 0.25" title="Crimson Red"></div>
+        <div class="color-chip" style="background: #c05cff; color: #c05cff;" data-rgb="0.75, 0.35, 1.0" title="Cyber Violet"></div>
+        <div class="color-chip color-picker-btn" title="Vlastná farba">
+            <input type="color" id="customColorPicker" value="#39ff14">
+        </div>
+    </div>
 
-            if (state.res === '720p') {
-                width = 1280;
-                height = 720;
-            } else if (state.res === '1080p60') {
-                width = 1920;
-                height = 1080;
-            } else if (state.res === '4K') {
-                width = 3840;
-                height = 2160;
-            }
+    <!-- Settings Menu Drawer -->
+    <div class="settings-drawer" id="settingsDrawer">
+        <div class="drawer-title">OPTICS & SENSORS</div>
+        <div class="setting-item">
+            <span>Filter Palette</span>
+            <select id="selectPalette">
+                <option value="0">Night Green (Phosphor)</option>
+                <option value="1">Thermal FLIR (Glow)</option>
+                <option value="2">X-Ray / Edge Scan</option>
+                <option value="3">Cyber Crimson Red</option>
+                <option value="4">Tactical Navy Blue</option>
+                <option value="5">Custom Tint (Vlastná)</option>
+            </select>
+        </div>
+        <div class="setting-item">
+            <span>Low-Light Boost</span>
+            <select id="selectBoost">
+                <option value="1.5">Standard (1.5x)</option>
+                <option value="2.5" selected>High Gain (2.5x)</option>
+                <option value="4.0">Ultra Dark (4.0x)</option>
+            </select>
+        </div>
+        <div class="setting-item">
+            <span>Noise Effect</span>
+            <select id="selectNoise">
+                <option value="1.0">Medium Sensor Grain</option>
+                <option value="2.0">Heavy Analog Noise</option>
+                <option value="0.0">Clean / No Grain</option>
+            </select>
+        </div>
+        <div class="setting-item">
+            <span>Resolution</span>
+            <select id="selectRes">
+                <option value="1080">1080p FHD</option>
+                <option value="2160">4K Ultra HD</option>
+                <option value="720">720p HD</option>
+            </select>
+        </div>
+    </div>
 
-            // Adjust aspect ratio dimensions
-            if (state.aspect === '9:16') {
-                const temp = width;
-                width = height;
-                height = temp; // Swap dimensions for Vertical Shorts
-            }
+    <!-- Zoom Level Switcher -->
+    <div class="zoom-picker">
+        <button class="zoom-btn" data-zoom="0.5">.5</button>
+        <button class="zoom-btn active" data-zoom="1.0">1x</button>
+        <button class="zoom-btn" data-zoom="2.0">2</button>
+        <button class="zoom-btn" data-zoom="5.0">5</button>
+    </div>
 
-            canvas.width = width;
-            canvas.height = height;
+    <!-- Bottom Controls -->
+    <div class="bottom-panel">
+        <div class="mode-selector">
+            <button class="mode-btn" id="modePhoto">FOTO</button>
+            <button class="mode-btn active" id="modeVideo">VIDEO</button>
+        </div>
 
-            // Update aspect wrapper aspect class
-            const wrapper = document.getElementById('viewfinderWrapper');
-            if (state.aspect === '9:16') {
-                wrapper.style.maxWidth = '450px';
-                wrapper.style.aspectRatio = '9/16';
-            } else {
-                wrapper.style.maxWidth = '100%';
-                wrapper.style.aspectRatio = '16/9';
-            }
+        <div class="shutter-row">
+            <div class="gallery-preview" id="galleryPreview">
+                <img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 24 24' fill='%23666'><path d='M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z'/></svg>" alt="Thumb" id="thumbImg">
+            </div>
+
+            <button class="shutter-button" id="shutterBtn">
+                <div class="shutter-inner"></div>
+            </button>
+
+            <button class="camera-flip" id="btnFlip">
+                <svg viewBox="0 0 24 24"><path d="M20 4h-3.17L15 2H9L6.83 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-8 13c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.65 0-3 1.35-3 3s1.35 3 3 3 3-1.35 3-3-1.35-3-3-3z"/></svg>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Video Stream element (Hidden) -->
+<video id="webcam" autoplay playsinline muted style="display:none;"></video>
+
+<script>
+    // System Variables
+    const canvas = document.getElementById('viewport');
+    const gl = canvas.getContext('webgl', { preserveDrawingBuffer: true });
+    const video = document.getElementById('webcam');
+    
+    let currentStream = null;
+    let facingMode = "environment";
+    let isRecording = false;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let recStartTime = 0;
+    let recTimerInterval = null;
+    
+    // Shader Uniform Defaults
+    let activePalette = 0;
+    let activeBoost = 2.5;
+    let activeZoom = 1.0;
+    let activeNoise = 1.0;
+    let customTint = [0.22, 1.0, 0.08]; // Default NVG Green
+    let activeMode = "VIDEO";
+
+    // WebGL Shaders (Realtime NVG, Custom Phosphor & Glow Engine)
+    const vsSource = `
+        attribute vec2 aPosition;
+        attribute vec2 aTexCoord;
+        varying vec2 vTexCoord;
+        void main() {
+            vTexCoord = aTexCoord;
+            gl_Position = vec4(aPosition, 0.0, 1.0);
+        }
+    `;
+
+    const fsSource = `
+        precision mediump float;
+        varying vec2 vTexCoord;
+        uniform sampler2D uTexture;
+        uniform float uTime;
+        uniform int uPalette;
+        uniform float uBoost;
+        uniform float uZoom;
+        uniform float uNoiseIntensity;
+        uniform vec3 uCustomTint;
+
+        // Pseudo noise generator
+        float rand(vec2 co) {
+            return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
         }
 
-        async function initCamera(deviceId = null) {
-            try {
-                if (window.currentStream) {
-                    window.currentStream.getTracks().forEach(track => track.stop());
-                }
+        void main() {
+            // Apply Zoom centered
+            vec2 uv = (vTexCoord - 0.5) / uZoom + 0.5;
+            
+            vec4 color = texture2D(uTexture, uv);
+            
+            // Calculate Luminance
+            float lum = dot(color.rgb, vec3(0.299, 0.587, 0.114));
+            lum *= uBoost;
 
-                const constraints = {
-                    video: {
-                        deviceId: deviceId ? { exact: deviceId } : undefined,
-                        width: { ideal: state.res === '4K' ? 3840 : 1920 },
-                        height: { ideal: state.res === '4K' ? 2160 : 1080 },
-                        frameRate: { ideal: 60, min: 30 }
-                    },
-                    audio: true
-                };
+            // Edge detection / Wall Glow filter logic
+            vec2 off = vec2(0.002, 0.002);
+            float lumL = dot(texture2D(uTexture, uv - vec2(off.x, 0.0)).rgb, vec3(0.299, 0.587, 0.114));
+            float lumR = dot(texture2D(uTexture, uv + vec2(off.x, 0.0)).rgb, vec3(0.299, 0.587, 0.114));
+            float lumU = dot(texture2D(uTexture, uv - vec2(0.0, off.y)).rgb, vec3(0.299, 0.587, 0.114));
+            float lumD = dot(texture2D(uTexture, uv + vec2(0.0, off.y)).rgb, vec3(0.299, 0.587, 0.114));
+            float edge = abs(lumL - lumR) + abs(lumU - lumD);
 
-                const stream = await navigator.mediaDevices.getUserMedia(constraints);
-                window.currentStream = stream;
-                video.srcObject = stream;
-                
-                // Track for flash/torch control
-                const videoTrack = stream.getVideoTracks()[0];
-                state.streamTrack = videoTrack;
+            // Digital Noise & Scanlines
+            float noise = (rand(uv + vec2(uTime * 1.5)) - 0.5) * 0.25 * uNoiseIntensity;
+            float scanline = sin(uv.y * 700.0) * 0.035;
 
-                // Populate camera devices list if not already
-                if (cameraSelect.options.length <= 1) {
-                    populateCameraDevices();
-                }
+            // Vignette effect
+            float distFromCenter = distance(uv, vec2(0.5));
+            float vignette = smoothstep(0.75, 0.35, distFromCenter);
 
-                showToast("Kamera bola úspešne spustená");
-            } catch (err) {
-                console.warn("Kamera nedostupná alebo zamietnutá. Používam fallback simulačný systém.", err);
-                showToast("Realne video nedostupné - spustený NVG Test Pattern");
-                createFallbackVideoPattern();
+            vec3 finalColor = vec3(0.0);
+
+            if (uPalette == 0) { 
+                // Night Green Phosphor
+                float g = clamp((lum + noise - scanline), 0.0, 1.0) * vignette;
+                finalColor = vec3(g * uCustomTint.r, g * uCustomTint.g, g * uCustomTint.b);
+            } else if (uPalette == 1) { 
+                // Thermal FLIR (Glowing heat map)
+                float t = clamp(lum + edge * 2.0, 0.0, 1.0);
+                finalColor = mix(vec3(0.0, 0.0, 0.5), vec3(1.0, 0.0, 0.0), t * 1.5);
+                if (t > 0.6) finalColor = mix(finalColor, vec3(1.0, 1.0, 0.0), (t - 0.6) * 2.5);
+                finalColor *= vignette;
+            } else if (uPalette == 2) { 
+                // X-Ray Edge Glow
+                float g = clamp(edge * 4.0 + lum * 0.2, 0.0, 1.0) * vignette;
+                finalColor = vec3(g * 0.2, g * 0.9, g * 1.0);
+            } else if (uPalette == 3) { 
+                // Cyber Crimson
+                float g = clamp((lum + noise), 0.0, 1.0) * vignette;
+                finalColor = vec3(g * 1.2, g * 0.05, g * 0.15);
+            } else if (uPalette == 4) { 
+                // Navy Tactical Blue
+                float g = clamp((lum + scanline), 0.0, 1.0) * vignette;
+                finalColor = vec3(g * 0.1, g * 0.45, g * 1.0);
+            } else if (uPalette == 5) {
+                // Custom Tint NVG
+                float g = clamp((lum + noise - scanline), 0.0, 1.0) * vignette;
+                finalColor = vec3(g * uCustomTint.r, g * uCustomTint.g, g * uCustomTint.b);
             }
+
+            gl_FragColor = vec4(finalColor, 1.0);
+        }
+    `;
+
+    // Initialize WebGL Program
+    function createShader(gl, type, source) {
+        const shader = gl.createShader(type);
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
+        return shader;
+    }
+
+    const program = gl.createProgram();
+    gl.attachShader(program, createShader(gl, gl.VERTEX_SHADER, vsSource));
+    gl.attachShader(program, createShader(gl, gl.FRAGMENT_SHADER, fsSource));
+    gl.linkProgram(program);
+    gl.useProgram(program);
+
+    // Quad Buffers
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+        -1, -1,  1, -1, -1,  1,
+        -1,  1,  1, -1,  1,  1,
+    ]), gl.STATIC_DRAW);
+
+    const texCoordBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+        0, 1,  1, 1,  0, 0,
+        0, 0,  1, 1,  1, 0,
+    ]), gl.STATIC_DRAW);
+
+    const aPosition = gl.getAttribLocation(program, 'aPosition');
+    gl.enableVertexAttribArray(aPosition);
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 0, 0);
+
+    const aTexCoord = gl.getAttribLocation(program, 'aTexCoord');
+    gl.enableVertexAttribArray(aTexCoord);
+    gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+    gl.vertexAttribPointer(aTexCoord, 2, gl.FLOAT, false, 0, 0);
+
+    // Uniform Locations
+    const uTimeLoc = gl.getUniformLocation(program, 'uTime');
+    const uPaletteLoc = gl.getUniformLocation(program, 'uPalette');
+    const uBoostLoc = gl.getUniformLocation(program, 'uBoost');
+    const uZoomLoc = gl.getUniformLocation(program, 'uZoom');
+    const uNoiseIntensityLoc = gl.getUniformLocation(program, 'uNoiseIntensity');
+    const uCustomTintLoc = gl.getUniformLocation(program, 'uCustomTint');
+
+    // Create Texture
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+    // Start Camera Feed
+    async function startCamera() {
+        if (currentStream) {
+            currentStream.getTracks().forEach(track => track.stop());
         }
 
-        async function populateCameraDevices() {
-            try {
-                const devices = await navigator.mediaDevices.enumerateDevices();
-                const videoDevices = devices.filter(d => d.kind === 'videoinput');
-                
-                cameraSelect.innerHTML = '';
-                videoDevices.forEach((device, index) => {
-                    const option = document.createElement('option');
-                    option.value = device.deviceId;
-                    option.text = device.label || `Kamera ${index + 1}`;
-                    cameraSelect.appendChild(option);
-                });
-            } catch (e) {
-                console.error("Chyba pri načítaní zariadení:", e);
-            }
-        }
-
-        function createFallbackVideoPattern() {
-            // Generates synthetic dynamic canvas input if no camera is attached
-            const dummyCanvas = document.createElement('canvas');
-            dummyCanvas.width = 1280;
-            dummyCanvas.height = 720;
-            const dCtx = dummyCanvas.getContext('2d');
-
-            let angle = 0;
-            function renderDummy() {
-                angle += 0.03;
-                dCtx.fillStyle = '#050b14';
-                dCtx.fillRect(0, 0, 1280, 720);
-
-                // Moving person silhouette
-                const x = 640 + Math.sin(angle) * 300;
-                dCtx.fillStyle = '#1e293b';
-                // Head
-                dCtx.beginPath();
-                dCtx.arc(x, 300, 45, 0, Math.PI * 2);
-                dCtx.fill();
-                // Body
-                dCtx.fillRect(x - 50, 350, 100, 200);
-
-                // Wall line
-                dCtx.strokeStyle = '#334155';
-                dCtx.lineWidth = 8;
-                dCtx.beginPath();
-                dCtx.moveTo(400, 100);
-                dCtx.lineTo(400, 620);
-                dCtx.stroke();
-
-                const stream = dummyCanvas.captureStream(60);
-                video.srcObject = stream;
-                video.play();
-
-                requestAnimationFrame(renderDummy);
-            }
-            renderDummy();
-        }
-
-        function processVideoFrame() {
-            if (video.readyState >= video.HAVE_CURRENT_DATA) {
-                const w = canvas.width;
-                const h = canvas.height;
-
-                // Draw raw frame scaled to canvas
-                ctx.drawImage(video, 0, 0, w, h);
-
-                // Acquire frame pixel data
-                const frame = ctx.getImageData(0, 0, w, h);
-                const data = frame.data;
-                const len = data.length;
-
-                const gain = state.gain;
-                const glowFactor = state.glow / 50;
-                const contrastFactor = state.contrast;
-
-                // Color Map transformations
-                for (let i = 0; i < len; i += 4) {
-                    let r = data[i];
-                    let g = data[i + 1];
-                    let b = data[i + 2];
-
-                    // Luminance calculation
-                    let luminance = (0.299 * r + 0.587 * g + 0.114 * b);
-
-                    // High gain dark light boost (enhances dim shadows)
-                    luminance = Math.min(255, luminance * gain * contrastFactor);
-
-                    // Wall Glow / Outline Heat Detection simulation (difference filter)
-                    let heatGlow = 0;
-                    if (state.mode === 'xray' || state.glow > 0) {
-                        // High pass detection for skin tones / bright silhouettes
-                        const warmth = (r * 1.2) - (b * 0.8);
-                        if (warmth > 30 || luminance > 120) {
-                            heatGlow = Math.min(255, warmth * glowFactor * 1.5);
-                        }
-                    }
-
-                    // Apply vision preset colors
-                    if (state.mode === 'green') {
-                        // Classic Phosphor Green NVG
-                        data[i] = luminance * 0.1;               // Red low
-                        data[i + 1] = Math.min(255, luminance + heatGlow); // Bright Emerald Green
-                        data[i + 2] = luminance * 0.15;              // Subtle Teal Tint
-                    } 
-                    else if (state.mode === 'thermal') {
-                        // FLIR Ironbow Thermal Palette
-                        const normLum = luminance / 255;
-                        if (normLum < 0.25) { // Dark / Cold -> Deep Blue
-                            data[i] = 0;
-                            data[i + 1] = normLum * 4 * 128;
-                            data[i + 2] = 180 + normLum * 4 * 75;
-                        } else if (normLum < 0.6) { // Warm -> Purple / Red
-                            data[i] = (normLum - 0.25) * 2.8 * 255;
-                            data[i + 1] = 0;
-                            data[i + 2] = 200 - (normLum - 0.25) * 2.8 * 200;
-                        } else if (normLum < 0.85) { // Hot -> Yellow/Orange
-                            data[i] = 255;
-                            data[i + 1] = (normLum - 0.6) * 4 * 255;
-                            data[i + 2] = 0;
-                        } else { // Extreme Heat -> White Hot Glow
-                            data[i] = 255;
-                            data[i + 1] = 255;
-                            data[i + 2] = (normLum - 0.85) * 6.6 * 255;
-                        }
-                    } 
-                    else if (state.mode === 'xray') {
-                        // Cybernetic Wall X-Ray Silhouette Glow Mode
-                        const edgeIntensity = Math.min(255, heatGlow * 2.5 + luminance * 0.5);
-                        data[i] = edgeIntensity * 0.2;
-                        data[i + 1] = Math.min(255, edgeIntensity * 1.8);
-                        data[i + 2] = Math.min(255, edgeIntensity * 2.2);
-                    } 
-                    else if (state.mode === 'amber') {
-                        // Aviation High-Contrast Amber
-                        data[i] = Math.min(255, luminance * 1.2 + heatGlow); // Red High
-                        data[i + 1] = Math.min(255, luminance * 0.7);       // Green Mid
-                        data[i + 2] = 0;                                   // Blue None
-                    } 
-                    else if (state.mode === 'cyber') {
-                        // Sci-Fi Cobalt Blue Vision
-                        data[i] = luminance * 0.1;
-                        data[i + 1] = Math.min(255, luminance * 0.8 + heatGlow * 0.5);
-                        data[i + 2] = Math.min(255, luminance * 1.5 + heatGlow);
-                    } 
-                    else if (state.mode === 'ir_bw') {
-                        // IR Monochrome Black & White
-                        const finalL = Math.min(255, luminance + heatGlow * 0.5);
-                        data[i] = finalL;
-                        data[i + 1] = finalL;
-                        data[i + 2] = finalL;
-                    }
-                }
-
-                // Add Sensor Grain Noise if enabled
-                if (state.noise > 0) {
-                    const noiseAmount = (state.noise / 100) * 40;
-                    for (let i = 0; i < len; i += 16) {
-                        const noiseVal = (Math.random() - 0.5) * noiseAmount;
-                        data[i] = Math.min(255, Math.max(0, data[i] + noiseVal));
-                        data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + noiseVal));
-                        data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + noiseVal));
-                    }
-                }
-
-                ctx.putImageData(frame, 0, 0);
-            }
-
-            // Calculate FPS Telemetry
-            frameCount++;
-            const now = performance.now();
-            if (now - lastFpsTime >= 1000) {
-                hudFps.innerText = frameCount;
-                frameCount = 0;
-                lastFpsTime = now;
-            }
-
-            requestAnimationFrame(processVideoFrame);
-        }
-
-        function toggleAudioHum(enable) {
-            if (enable) {
-                if (!state.audioCtx) {
-                    state.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                }
-                if (state.audioCtx.state === 'suspended') {
-                    state.audioCtx.resume();
-                }
-                state.humOsc = state.audioCtx.createOscillator();
-                state.humGain = state.audioCtx.createGain();
-
-                state.humOsc.type = 'sine';
-                state.humOsc.frequency.setValueAtTime(60, state.audioCtx.currentTime); // 60Hz Electrical Hum
-                state.humGain.gain.setValueAtTime(0.02, state.audioCtx.currentTime); // Soft volume
-
-                state.humOsc.connect(state.humGain);
-                state.humGain.connect(state.audioCtx.destination);
-                state.humOsc.start();
-            } else {
-                if (state.humOsc) {
-                    state.humOsc.stop();
-                    state.humOsc.disconnect();
-                    state.humOsc = null;
-                }
-            }
-        }
-
-        function startRecording() {
-            state.recordedChunks = [];
-            const stream = canvas.captureStream(60); // Record smooth 60fps stream from Canvas
-
-            // Include microphone sound if available
-            if (window.currentStream && window.currentStream.getAudioTracks().length > 0) {
-                stream.addTrack(window.currentStream.getAudioTracks()[0]);
-            }
-
-            const options = { mimeType: 'video/webm;codecs=vp9' };
-            try {
-                state.mediaRecorder = new MediaRecorder(stream, options);
-            } catch (e) {
-                state.mediaRecorder = new MediaRecorder(stream); // Fallback
-            }
-
-            state.mediaRecorder.ondataavailable = (e) => {
-                if (e.data.size > 0) {
-                    state.recordedChunks.push(e.data);
-                }
+        try {
+            const constraints = {
+                video: {
+                    facingMode: facingMode,
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 },
+                    frameRate: { ideal: 60 }
+                },
+                audio: true
             };
 
-            state.mediaRecorder.onstop = () => {
-                const blob = new Blob(state.recordedChunks, { type: 'video/webm' });
-                const videoUrl = URL.createObjectURL(blob);
-                downloadVideoBtn.href = videoUrl;
-                downloadVideoBtn.download = `NVG_Record_${state.mode}_${Date.now()}.webm`;
-                recordingResultBox.classList.remove('hidden');
-                showToast("Nahrávanie dokončené! Video pripravené na stiahnutie.");
-            };
+            currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = currentStream;
+            video.play();
+        } catch (err) {
+            alert('Kamera prístup zlyhal: ' + err.message);
+        }
+    }
 
-            state.mediaRecorder.start(100); // 100ms chunks
-            state.isRecording = true;
-            state.recordingTime = 0;
-
-            recBtnLabel.innerText = "ZASTAVIŤ";
-            btnRecord.classList.remove('bg-red-600', 'hover:bg-red-500');
-            btnRecord.classList.add('bg-slate-700', 'hover:bg-slate-600', 'animate-pulse');
-            recDot.classList.remove('opacity-0');
-
-            recordingInterval = setInterval(() => {
-                state.recordingTime++;
-                const hrs = String(Math.floor(state.recordingTime / 3600)).padStart(2, '0');
-                const mins = String(Math.floor((state.recordingTime % 3600) / 60)).padStart(2, '0');
-                const secs = String(state.recordingTime % 60).padStart(2, '0');
-                recordingTimer.innerText = `${hrs}:${mins}:${secs}`;
-            }, 1000);
-
-            showToast("Nahrávanie spustené (60 FPS)...");
+    // Render Loop
+    let lastTime = 0;
+    function render(time) {
+        time *= 0.001; // convert to seconds
+        
+        // Resize Canvas to Match Viewport
+        if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            gl.viewport(0, 0, canvas.width, canvas.height);
         }
 
-        function stopRecording() {
-            if (state.mediaRecorder && state.isRecording) {
-                state.mediaRecorder.stop();
-                state.isRecording = false;
-                clearInterval(recordingInterval);
+        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+            
+            gl.uniform1f(uTimeLoc, time);
+            gl.uniform1i(uPaletteLoc, activePalette);
+            gl.uniform1f(uBoostLoc, activeBoost);
+            gl.uniform1f(uZoomLoc, activeZoom);
+            gl.uniform1f(uNoiseIntensityLoc, activeNoise);
+            gl.uniform3f(uCustomTintLoc, customTint[0], customTint[1], customTint[2]);
 
-                recBtnLabel.innerText = "NAHRAŤ";
-                btnRecord.classList.add('bg-red-600', 'hover:bg-red-500');
-                btnRecord.classList.remove('bg-slate-700', 'hover:bg-slate-600', 'animate-pulse');
-                recDot.classList.add('opacity-0');
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+        }
+
+        // Calculate FPS
+        const fps = Math.round(1 / (time - lastTime));
+        lastTime = time;
+        if(fps && fps < 120) document.getElementById('hudFPS').innerText = `FPS: ${fps}`;
+
+        requestAnimationFrame(render);
+    }
+
+    // Function to apply Custom Color Theme across UI & Shader
+    function setNvgColor(r, g, b, hexStr) {
+        customTint = [r, g, b];
+        document.documentElement.style.setProperty('--nvg-color', hexStr || `rgb(${Math.round(r*255)}, ${Math.round(g*255)}, ${Math.round(b*255)})`);
+        document.documentElement.style.setProperty('--nvg-glow', `rgba(${Math.round(r*255)}, ${Math.round(g*255)}, ${Math.round(b*255)}, 0.4)`);
+    }
+
+    // Interactive Color Bar Swatches
+    document.querySelectorAll('.color-chip[data-rgb]').forEach(chip => {
+        chip.addEventListener('click', () => {
+            document.querySelectorAll('.color-chip').forEach(c => c.classList.remove('active'));
+            chip.classList.add('active');
+            
+            const [r, g, b] = chip.dataset.rgb.split(',').map(v => parseFloat(v.trim()));
+            setNvgColor(r, g, b, chip.style.background);
+            
+            // Switch to Phosphor / Custom mode
+            if (activePalette !== 0 && activePalette !== 5) {
+                activePalette = 0;
+                document.getElementById('selectPalette').value = "0";
+                document.getElementById('hudMode').innerText = `PALETTE: CUSTOM TINT`;
             }
-        }
+        });
+    });
 
-        function takeSnapshot() {
+    // Custom Color Input (Color Picker)
+    const customPicker = document.getElementById('customColorPicker');
+    customPicker.addEventListener('input', (e) => {
+        document.querySelectorAll('.color-chip').forEach(c => c.classList.remove('active'));
+        customPicker.parentElement.classList.add('active');
+        
+        const hex = e.target.value;
+        const r = parseInt(hex.slice(1,3), 16) / 255;
+        const g = parseInt(hex.slice(3,5), 16) / 255;
+        const b = parseInt(hex.slice(5,7), 16) / 255;
+        
+        setNvgColor(r, g, b, hex);
+        activePalette = 5;
+        document.getElementById('selectPalette').value = "5";
+        document.getElementById('hudMode').innerText = `PALETTE: CUSTOM HEX`;
+    });
+
+    // Interactive Controls & Events
+    document.getElementById('btnSettings').addEventListener('click', () => {
+        document.getElementById('settingsDrawer').classList.toggle('active');
+    });
+
+    document.getElementById('selectPalette').addEventListener('change', (e) => {
+        activePalette = parseInt(e.target.value);
+        const names = ["NVG GREEN", "THERMAL FLIR", "X-RAY GLOW", "CYBER RED", "NAVY BLUE", "CUSTOM TINT"];
+        document.getElementById('hudMode').innerText = `PALETTE: ${names[activePalette]}`;
+    });
+
+    document.getElementById('selectBoost').addEventListener('change', (e) => {
+        activeBoost = parseFloat(e.target.value);
+        document.getElementById('hudGain').innerText = `GAIN: +${Math.round(activeBoost * 5)}dB`;
+    });
+
+    document.getElementById('selectNoise').addEventListener('change', (e) => {
+        activeNoise = parseFloat(e.target.value);
+    });
+
+    // Zoom Buttons
+    document.querySelectorAll('.zoom-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.zoom-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            activeZoom = parseFloat(btn.dataset.zoom);
+        });
+    });
+
+    // Camera Flip
+    document.getElementById('btnFlip').addEventListener('click', () => {
+        facingMode = (facingMode === "environment") ? "user" : "environment";
+        startCamera();
+    });
+
+    // Photo/Video Switcher
+    document.getElementById('modePhoto').addEventListener('click', () => {
+        activeMode = "PHOTO";
+        document.getElementById('modePhoto').classList.add('active');
+        document.getElementById('modeVideo').classList.remove('active');
+        document.getElementById('shutterBtn').classList.remove('recording');
+    });
+
+    document.getElementById('modeVideo').addEventListener('click', () => {
+        activeMode = "VIDEO";
+        document.getElementById('modeVideo').classList.add('active');
+        document.getElementById('modePhoto').classList.remove('active');
+    });
+
+    // Shutter Click Handler (Capture Photo / Record Video)
+    const shutterBtn = document.getElementById('shutterBtn');
+    shutterBtn.addEventListener('click', () => {
+        if (activeMode === "PHOTO") {
+            const dataUrl = canvas.toDataURL('image/png');
+            document.getElementById('thumbImg').src = dataUrl;
+            
+            // Flash effect
+            canvas.style.opacity = '0.3';
+            setTimeout(() => canvas.style.opacity = '1', 100);
+            
             const link = document.createElement('a');
-            link.download = `NVG_Snapshot_${state.mode}_${Date.now()}.png`;
-            link.href = canvas.toDataURL('image/png');
+            link.download = `NVG_SNAP_${Date.now()}.png`;
+            link.href = dataUrl;
             link.click();
-            showToast("Fotografia uložená do zariadenia!");
+        } else {
+            if (!isRecording) {
+                startRecording();
+            } else {
+                stopRecording();
+            }
+        }
+    });
+
+    function startRecording() {
+        isRecording = true;
+        recordedChunks = [];
+        const canvasStream = canvas.captureStream(60);
+        
+        if (currentStream && currentStream.getAudioTracks().length > 0) {
+            canvasStream.addTrack(currentStream.getAudioTracks()[0]);
         }
 
-        function showToast(msg) {
-            toastMsg.innerText = msg;
-            toast.classList.remove('opacity-0');
-            setTimeout(() => {
-                toast.classList.add('opacity-0');
-            }, 3000);
-        }
-
-        function initEventListeners() {
-            // Preset Mode Switcher
-            document.querySelectorAll('.mode-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    document.querySelectorAll('.mode-btn').forEach(b => {
-                        b.classList.remove('bg-emerald-950/80', 'border-emerald-500/60', 'text-emerald-400', 'shadow-glow-green');
-                        b.classList.add('bg-slate-800', 'border-slate-700', 'text-slate-300');
-                    });
-
-                    const target = e.currentTarget;
-                    target.classList.remove('bg-slate-800', 'border-slate-700', 'text-slate-300');
-                    target.classList.add('bg-emerald-950/80', 'border-emerald-500/60', 'text-emerald-400', 'shadow-glow-green');
-
-                    state.mode = target.getAttribute('data-mode');
-                    document.getElementById('hdr-mode-badge').innerText = state.mode.toUpperCase();
-                    document.getElementById('hudSpectrumName').innerText = state.mode.toUpperCase();
-                    showToast(`Režim zmenený: ${state.mode.toUpperCase()}`);
-                });
-            });
-
-            // Aspect Ratio Switches
-            aspect169.addEventListener('click', () => {
-                state.aspect = '16:9';
-                aspect169.className = "px-2 py-0.5 rounded text-xs bg-emerald-500 text-slate-950 font-bold transition";
-                aspect916.className = "px-2 py-0.5 rounded text-xs text-slate-400 hover:text-white transition";
-                updateCanvasResolution();
-                showToast("Formát: 16:9 (YouTube Standard)");
-            });
-
-            aspect916.addEventListener('click', () => {
-                state.aspect = '9:16';
-                aspect916.className = "px-2 py-0.5 rounded text-xs bg-emerald-500 text-slate-950 font-bold transition";
-                aspect169.className = "px-2 py-0.5 rounded text-xs text-slate-400 hover:text-white transition";
-                updateCanvasResolution();
-                showToast("Formát: 9:16 (YouTube Shorts / TikTok)");
-            });
-
-            // Resolution Switcher
-            resSelect.addEventListener('change', (e) => {
-                state.res = e.target.value;
-                updateCanvasResolution();
-                showToast(`Rozlíšenie zmenené na ${state.res}`);
-            });
-
-            // Camera Device Switch
-            cameraSelect.addEventListener('change', (e) => {
-                initCamera(e.target.value);
-            });
-
-            // Sliders
-            document.getElementById('sliderGain').addEventListener('input', (e) => {
-                state.gain = parseFloat(e.target.value);
-                document.getElementById('gainValText').innerText = `${state.gain}x`;
-                document.getElementById('hudGainVal').innerText = `${state.gain}x`;
-            });
-
-            document.getElementById('sliderGlow').addEventListener('input', (e) => {
-                state.glow = parseInt(e.target.value);
-                document.getElementById('glowValText').innerText = `${state.glow}%`;
-            });
-
-            document.getElementById('sliderNoise').addEventListener('input', (e) => {
-                state.noise = parseInt(e.target.value);
-                document.getElementById('noiseValText').innerText = `${state.noise}%`;
-            });
-
-            document.getElementById('sliderContrast').addEventListener('input', (e) => {
-                state.contrast = parseFloat(e.target.value);
-                document.getElementById('contrastValText').innerText = `${state.contrast}x`;
-            });
-
-            // Checkboxes
-            document.getElementById('chkHud').addEventListener('change', (e) => {
-                hudOverlay.style.display = e.target.checked ? 'flex' : 'none';
-            });
-
-            document.getElementById('chkScanlines').addEventListener('change', (e) => {
-                hudVignette.style.display = e.target.checked ? 'block' : 'none';
-            });
-
-            document.getElementById('chkAudioHum').addEventListener('change', (e) => {
-                state.audioHum = e.target.checked;
-                toggleAudioHum(state.audioHum);
-            });
-
-            // Record & Snapshot Actions
-            btnRecord.addEventListener('click', () => {
-                if (!state.isRecording) {
-                    startRecording();
-                } else {
-                    stopRecording();
-                }
-            });
-
-            btnSnapshot.addEventListener('click', takeSnapshot);
-
-            // Flashlight / Torch toggle
-            btnTorch.addEventListener('click', async () => {
-                if (state.streamTrack && typeof state.streamTrack.applyConstraints === 'function') {
-                    try {
-                        state.torchOn = !state.torchOn;
-                        await state.streamTrack.applyConstraints({
-                            advanced: [{ torch: state.torchOn }]
-                        });
-                        btnTorch.classList.toggle('text-yellow-400', state.torchOn);
-                        showToast(state.torchOn ? "IR Svietidlo ZAPNUTÉ" : "IR Svietidlo VYPNUTÉ");
-                    } catch (err) {
-                        showToast("Blesk / Svietidlo nie je dostupné na tomto zariadení");
-                    }
-                } else {
-                    showToast("Blesk nie je podporovaný prehliadačom");
-                }
-            });
-
-            // Fullscreen
-            document.getElementById('btnFullscreen').addEventListener('click', () => {
-                if (!document.fullscreenElement) {
-                    document.documentElement.requestFullscreen();
-                } else {
-                    document.exitFullscreen();
-                }
-            });
-
-            // Real-time HUD Clock Update
-            setInterval(() => {
-                const d = new Date();
-                hudClock.innerText = d.toUTCString().split(' ')[4] + ' UTC';
-            }, 1000);
-        }
-
-        window.onload = function() {
-            updateCanvasResolution();
-            initEventListeners();
-            initCamera();
-            requestAnimationFrame(processVideoFrame);
+        mediaRecorder = new MediaRecorder(canvasStream, { mimeType: 'video/webm;codecs=vp9' });
+        
+        mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) recordedChunks.push(e.data);
         };
-    </script>
+
+        mediaRecorder.onstop = () => {
+            const blob = new Blob(recordedChunks, { type: 'video/webm' });
+            const url = URL.createObjectURL(blob);
+            
+            const link = document.createElement('a');
+            link.download = `NVG_REC_${Date.now()}.webm`;
+            link.href = url;
+            link.click();
+        };
+
+        mediaRecorder.start();
+        shutterBtn.classList.add('recording');
+        document.getElementById('recIndicator').style.display = 'flex';
+        recStartTime = Date.now();
+        
+        recTimerInterval = setInterval(() => {
+            const elapsed = Math.floor((Date.now() - recStartTime) / 1000);
+            const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+            const s = String(elapsed % 60).padStart(2, '0');
+            document.getElementById('recTimer').innerText = `${m}:${s}`;
+        }, 1000);
+    }
+
+    function stopRecording() {
+        isRecording = false;
+        mediaRecorder.stop();
+        shutterBtn.classList.remove('recording');
+        document.getElementById('recIndicator').style.display = 'none';
+        clearInterval(recTimerInterval);
+    }
+
+    // Run System
+    startCamera();
+    requestAnimationFrame(render);
+</script>
 </body>
 </html>
