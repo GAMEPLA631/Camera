@@ -1,485 +1,906 @@
 <!DOCTYPE html>
-<html lang="sk">
+<html lang="sk" class="h-full bg-slate-950 text-slate-100 dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MIL-SPEC NIGHT VISION & AURA SCANNER</title>
+    <title>Tactical Night Vision Camera Pro - 1080p/60fps & 4K</title>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+
+    <!-- Google Fonts: Orbitron & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Orbitron:wght@400;600;800;900&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        hud: ['Orbitron', 'monospace'],
+                    },
+                    colors: {
+                        nvg: {
+                            green: '#00ff41',
+                            darkgreen: '#003b00',
+                            amber: '#ffb000',
+                            cyan: '#00f3ff',
+                            thermal: '#ff2a00'
+                        }
+                    },
+                    boxShadow: {
+                        'glow-green': '0 0 20px rgba(0, 255, 65, 0.4)',
+                        'glow-amber': '0 0 20px rgba(255, 176, 0, 0.4)',
+                        'glow-cyan': '0 0 20px rgba(0, 243, 255, 0.4)',
+                        'glow-red': '0 0 20px rgba(255, 42, 0, 0.5)',
+                    }
+                }
+            }
+        }
+    </script>
+
     <style>
-        :root {
-            --nv-green: #00ff66;
-            --nv-glow: rgba(0, 255, 102, 0.4);
-            --hud-font: 'Courier New', Courier, monospace;
+        /* Scanlines and screen noise overlay */
+        .scanlines {
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0, 0, 0, 0.3) 50%,
+                rgba(0, 0, 0, 0.3)
+            );
+            background-size: 100% 4px;
         }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            user-select: none;
+        .vignette {
+            background: radial-gradient(circle, transparent 55%, rgba(0,0,0,0.85) 100%);
         }
 
-        body {
-            background-color: #050805;
-            color: var(--nv-green);
-            font-family: var(--hud-font);
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
+        .crt-flicker {
+            animation: flicker 0.15s infinite;
         }
 
-        /* Viewport kontajner */
-        #viewport {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: #000;
+        @keyframes flicker {
+            0% { opacity: 0.98; }
+            50% { opacity: 1; }
+            100% { opacity: 0.97; }
         }
 
-        video {
-            display: none;
+        /* Custom Range Slider */
+        input[type=range] {
+            accent-color: #00ff41;
         }
 
-        canvas {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-            box-shadow: 0 0 50px rgba(0, 0, 0, 0.9);
+        /* Hide Scrollbar for clean tactical look */
+        ::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
         }
-
-        /* Scanlines & CRT efekt */
-        .overlay-crt {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
-            background-size: 100% 3px, 6px 100%;
-            pointer-events: none;
-            z-index: 10;
+        ::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.5);
         }
-
-        /* Taktický HUD Display */
-        .hud-layer {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 15;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            padding: 20px;
-            text-shadow: 0 0 8px var(--nv-green);
-        }
-
-        .hud-header, .hud-footer {
-            display: flex;
-            justify-content: space-between;
-            font-size: 14px;
-            letter-spacing: 2px;
-        }
-
-        .hud-reticle {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 260px;
-            height: 260px;
-            border: 1px dashed var(--nv-green);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            opacity: 0.7;
-        }
-
-        .hud-reticle::before {
-            content: '';
-            position: absolute;
-            width: 30px;
-            height: 30px;
-            border: 2px solid var(--nv-green);
-        }
-
-        .rec-dot {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            background: red;
-            border-radius: 50%;
-            margin-right: 6px;
-            animation: blink 1s infinite;
-        }
-
-        @keyframes blink {
-            50% { opacity: 0; }
-        }
-
-        /* Kontrolný panel */
-        .control-panel {
-            position: absolute;
-            bottom: 25px;
-            z-index: 20;
-            background: rgba(0, 15, 5, 0.85);
-            border: 1px solid var(--nv-green);
-            box-shadow: 0 0 20px var(--nv-glow);
-            padding: 12px 20px;
-            border-radius: 8px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
-            align-items: center;
-            justify-content: center;
-            backdrop-filter: blur(8px);
-        }
-
-        button, select {
-            background: rgba(0, 30, 10, 0.9);
-            border: 1px solid var(--nv-green);
-            color: var(--nv-green);
-            padding: 8px 14px;
-            font-family: var(--hud-font);
-            font-weight: bold;
-            font-size: 13px;
-            border-radius: 4px;
-            cursor: pointer;
-            text-shadow: 0 0 4px var(--nv-green);
-            transition: 0.2s all;
-        }
-
-        button:hover, select:hover {
-            background: var(--nv-green);
-            color: #000;
-            box-shadow: 0 0 12px var(--nv-green);
-        }
-
-        .btn-record {
-            background: #400;
-            border-color: #f33;
-            color: #f66;
-            text-shadow: 0 0 4px #f33;
-        }
-
-        .btn-record.recording {
-            background: #f00;
-            color: #fff;
-            box-shadow: 0 0 15px #f00;
-        }
-
-        .slider-group {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 12px;
-        }
-
-        input[type="range"] {
-            accent-color: var(--nv-green);
-            cursor: pointer;
+        ::-webkit-scrollbar-thumb {
+            background: #00ff41;
+            border-radius: 2px;
         }
     </style>
 </head>
-<body>
+<body class="h-full flex flex-col font-sans overflow-hidden select-none bg-slate-950 text-slate-100">
 
-    <div id="viewport">
-        <video id="webcam" autoplay playsinline></video>
-        <canvas id="outputCanvas"></canvas>
-        <div class="overlay-crt"></div>
+    <!-- TOP HUD HEADER BAR -->
+    <header class="h-14 border-b border-slate-800 bg-slate-900/80 backdrop-blur px-4 flex items-center justify-between z-30 shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></div>
+            <h1 class="font-hud font-extrabold text-sm sm:text-base tracking-wider text-emerald-400 flex items-center gap-2">
+                <i class="fa-solid fa-eye text-emerald-400"></i> NVG-ULTRA <span class="text-xs font-normal text-slate-400 hidden sm:inline">| TACTICAL VISION 1080p/4K</span>
+            </h1>
+        </div>
 
-        <!-- HUD Taktické prvky -->
-        <div class="hud-layer">
-            <div class="hud-header">
-                <div>SYS: ONLINE // NV-GEN4</div>
-                <div id="recStatus" style="display: none;"><span class="rec-dot"></span>REC [<span id="recTimer">00:00</span>]</div>
-                <div id="fpsCounter">FPS: 60</div>
+        <div class="flex items-center gap-2 sm:gap-4 font-hud text-xs text-slate-300">
+            <!-- Mode indicator -->
+            <div id="hdr-mode-badge" class="px-2 py-1 rounded bg-emerald-950 border border-emerald-500/40 text-emerald-400 font-semibold tracking-wider">
+                NIGHT GREEN
             </div>
+
+            <!-- Resolution Selector -->
+            <div class="flex items-center gap-1 bg-slate-800/80 rounded px-2 py-1 border border-slate-700">
+                <i class="fa-solid fa-video text-slate-400 text-xs"></i>
+                <select id="resSelect" class="bg-transparent text-xs text-slate-200 outline-none cursor-pointer">
+                    <option value="720p" class="bg-slate-900 text-slate-200">720p HD</option>
+                    <option value="1080p60" selected class="bg-slate-900 text-slate-200">1080p 60FPS</option>
+                    <option value="4K" class="bg-slate-900 text-slate-200">4K Ultra HD</option>
+                </select>
+            </div>
+
+            <!-- Format Aspect Ratio Switcher -->
+            <div class="flex items-center bg-slate-800 rounded p-0.5 border border-slate-700">
+                <button id="aspect169" class="px-2 py-0.5 rounded text-xs bg-emerald-500 text-slate-950 font-bold transition">16:9 (YT)</button>
+                <button id="aspect916" class="px-2 py-0.5 rounded text-xs text-slate-400 hover:text-white transition">9:16 (Shorts)</button>
+            </div>
+
+            <button id="btnFullscreen" class="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition">
+                <i class="fa-solid fa-expand"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN WORKSPACE -->
+    <div class="flex-1 relative flex overflow-hidden">
+        
+        <!-- CANVAS / CAMERA VIEWFINDER CONTAINER -->
+        <div class="flex-1 relative bg-black flex items-center justify-center overflow-hidden">
             
-            <div class="hud-reticle">
-                <div style="font-size: 10px; position: absolute; top: 10px;">BIO-SCAN: ACTIVE</div>
-                <div style="font-size: 10px; position: absolute; bottom: 10px;">WALL-AURA: ON</div>
-            </div>
+            <!-- Dynamic Wrapper for Aspect Ratio scaling -->
+            <div id="viewfinderWrapper" class="relative w-full h-full flex items-center justify-center transition-all duration-300">
+                
+                <!-- Video Element (Hidden source) -->
+                <video id="webcam" autoplay playsinline muted class="hidden"></video>
 
-            <div class="hud-footer">
-                <div id="resIndicator">RES: 1920x1080 @60FPS</div>
-                <div id="gainIndicator">LIGHT GAIN: +200%</div>
-                <div>ISO: AUTO (ULTRA-NIGHT)</div>
+                <!-- Processing Canvas -->
+                <canvas id="canvasOut" class="max-w-full max-h-full object-contain shadow-2xl rounded-sm"></canvas>
+
+                <!-- HUD OVERLAY LAYER -->
+                <div id="hudOverlay" class="absolute inset-0 pointer-events-none flex flex-col justify-between p-4 sm:p-6 crt-flicker">
+                    
+                    <!-- Vignette & Scanline visual filter -->
+                    <div id="hudVignette" class="absolute inset-0 vignette scanlines pointer-events-none"></div>
+
+                    <!-- HUD Top Status -->
+                    <div class="relative z-10 flex justify-between items-start font-hud text-xs text-emerald-400/90 tracking-widest">
+                        <div class="space-y-1 bg-slate-950/60 p-2 rounded border border-emerald-500/20 backdrop-blur-sm">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
+                                <span id="recordingTimer" class="font-mono text-red-400 font-bold text-sm">00:00:00</span>
+                                <span id="recDot" class="text-red-500 font-bold opacity-0">● REC</span>
+                            </div>
+                            <div>ISO: <span id="hudIsoVal">12800</span> HIGH-GAIN</div>
+                            <div>IR ILLUM: <span id="hudIrState" class="text-emerald-300">BOOST 200%</span></div>
+                        </div>
+
+                        <!-- Target Crosshair Center Widget -->
+                        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-40">
+                            <div class="w-32 h-32 border border-emerald-500/40 rounded-full flex items-center justify-center relative">
+                                <div class="w-4 h-4 border-t-2 border-l-2 border-emerald-400 absolute top-0 left-0"></div>
+                                <div class="w-4 h-4 border-t-2 border-r-2 border-emerald-400 absolute top-0 right-0"></div>
+                                <div class="w-4 h-4 border-b-2 border-l-2 border-emerald-400 absolute bottom-0 left-0"></div>
+                                <div class="w-4 h-4 border-b-2 border-r-2 border-emerald-400 absolute bottom-0 right-0"></div>
+                                <div class="w-1.5 h-1.5 bg-emerald-400 rounded-full"></div>
+                            </div>
+                        </div>
+
+                        <div class="text-right space-y-1 bg-slate-950/60 p-2 rounded border border-emerald-500/20 backdrop-blur-sm">
+                            <div>FPS: <span id="hudFps">60</span></div>
+                            <div>X-RAY GLOW: <span id="hudGlowState" class="text-emerald-300">ACTIVE</span></div>
+                            <div id="hudClock">00:00:00 UTC</div>
+                        </div>
+                    </div>
+
+                    <!-- Bottom HUD Telemetry -->
+                    <div class="relative z-10 flex justify-between items-end font-hud text-xs text-emerald-400/80">
+                        <div class="space-y-1 bg-slate-950/60 p-2 rounded border border-emerald-500/20 backdrop-blur-sm">
+                            <div>ELEV: <span id="hudElev">142m</span></div>
+                            <div>SENSITIVITY: <span id="hudGainVal">2.5x</span></div>
+                        </div>
+
+                        <!-- Pitch/Roll Compass Scale -->
+                        <div class="hidden md:flex flex-col items-center gap-1">
+                            <div class="w-48 h-5 border-b border-emerald-500/40 flex justify-between px-1 text-[10px]">
+                                <span>W</span><span>NW</span><span>N</span><span>NE</span><span>E</span>
+                            </div>
+                            <div class="text-[10px] tracking-widest text-emerald-400/70">COMPASS 354° N</div>
+                        </div>
+
+                        <div class="space-y-1 text-right bg-slate-950/60 p-2 rounded border border-emerald-500/20 backdrop-blur-sm">
+                            <div>SPECTRUM: <span id="hudSpectrumName">NIGHT PHOSPHOR</span></div>
+                            <div>BATTERY: <span id="hudBattery">98%</span> <i class="fa-solid fa-battery-full text-emerald-400"></i></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Toast / Notification Center -->
+                <div id="toast" class="absolute top-6 left-1/2 -translate-x-1/2 bg-slate-900/90 text-emerald-400 border border-emerald-500/50 px-4 py-2 rounded-lg font-hud text-xs shadow-glow-green opacity-0 transition-opacity duration-300 z-50 pointer-events-none flex items-center gap-2">
+                    <i class="fa-solid fa-circle-info"></i> <span id="toastMsg">Systém pripravený</span>
+                </div>
             </div>
         </div>
 
-        <!-- Nastavovací panel -->
-        <div class="control-panel">
-            <select id="modeSelect">
-                <option value="night-green">🟢 NIGHT GREEN (Phosphor PVS-14)</option>
-                <option value="white-phosphor">⚪ WHITE PHOSPHOR (PVS-31)</option>
-                <option value="thermal-predator">🔥 THERMAL FLIR (Predator)</option>
-                <option value="cyber-xray">🟣 CYBER X-RAY / WALL-GLOW</option>
-                <option value="red-spec">🔴 RED TACTICAL</option>
-            </select>
-
-            <select id="resSelect">
-                <option value="yt-shorts">📱 YT SHORTS (1080x1920 / 9:16)</option>
-                <option value="1080p" selected>🎬 FULL HD (1920x1080 / 16:9)</option>
-                <option value="4k">🌟 4K UHD (3840x2160)</option>
-                <option value="720p">⚡ HD 720p</option>
-            </select>
-
-            <div class="slider-group">
-                <label>NOČNÉ SVETLO (GAIN):</label>
-                <input type="range" id="gainSlider" min="1" max="4" step="0.1" value="2.2">
+        <!-- CONTROL PANEL SIDEBAR -->
+        <aside id="sidebar" class="w-80 border-l border-slate-800 bg-slate-900/95 backdrop-blur flex flex-col z-20 transition-all duration-300 overflow-y-auto">
+            
+            <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+                <h2 class="font-hud font-bold text-sm tracking-wider text-slate-200 flex items-center gap-2">
+                    <i class="fa-solid fa-sliders text-emerald-400"></i> OVLÁDANIE KAMERY
+                </h2>
+                <button id="toggleSidebar" class="sm:hidden text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
             </div>
 
-            <div class="slider-group">
-                <label>WALL GLOW / AURA:</label>
-                <input type="range" id="glowSlider" min="0" max="100" value="65">
+            <!-- CAMERA SOURCE & TORCH -->
+            <div class="p-4 border-b border-slate-800/80 space-y-3">
+                <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Zdroj Vstupu & Blesk</label>
+                <div class="flex gap-2">
+                    <select id="cameraSelect" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
+                        <option value="">Načítavam kamery...</option>
+                    </select>
+                    <button id="btnTorch" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-300 hover:text-yellow-400 transition" title="IR Blesk / Svietidlo">
+                        <i class="fa-solid fa-bolt"></i>
+                    </button>
+                </div>
             </div>
 
-            <button id="recBtn" class="btn-record">⏺ SPUSTIŤ NAHRÁVANIE</button>
-        </div>
+            <!-- VISION MODES PRESETS -->
+            <div class="p-4 border-b border-slate-800/80 space-y-3">
+                <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Nočné & Termálne Režimy</label>
+                
+                <div class="grid grid-cols-2 gap-2">
+                    <button data-mode="green" class="mode-btn px-3 py-2 rounded-lg bg-emerald-950/80 border border-emerald-500/60 text-emerald-400 font-hud text-xs font-semibold flex items-center gap-2 justify-center hover:bg-emerald-900/60 transition shadow-glow-green">
+                        <i class="fa-solid fa-eye"></i> Green NVG
+                    </button>
+                    
+                    <button data-mode="thermal" class="mode-btn px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-hud text-xs font-semibold flex items-center gap-2 justify-center hover:bg-slate-700 transition">
+                        <i class="fa-solid fa-fire"></i> FLIR Thermal
+                    </button>
+
+                    <button data-mode="xray" class="mode-btn px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-hud text-xs font-semibold flex items-center gap-2 justify-center hover:bg-slate-700 transition">
+                        <i class="fa-solid fa-person-rays"></i> Wall X-Ray
+                    </button>
+
+                    <button data-mode="amber" class="mode-btn px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-hud text-xs font-semibold flex items-center gap-2 justify-center hover:bg-slate-700 transition">
+                        <i class="fa-solid fa-sun"></i> Amber Vision
+                    </button>
+
+                    <button data-mode="cyber" class="mode-btn px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-hud text-xs font-semibold flex items-center gap-2 justify-center hover:bg-slate-700 transition">
+                        <i class="fa-solid fa-atom"></i> Cyber Blue
+                    </button>
+
+                    <button data-mode="ir_bw" class="mode-btn px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-hud text-xs font-semibold flex items-center gap-2 justify-center hover:bg-slate-700 transition">
+                        <i class="fa-solid fa-moon"></i> IR Mono
+                    </button>
+                </div>
+            </div>
+
+            <!-- FINE TUNING SLIDERS -->
+            <div class="p-4 border-b border-slate-800/80 space-y-4">
+                <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Úprava Obrazu v Tme & Svietivosti</label>
+                
+                <!-- Pitch Dark Sensitivity (Amplification) -->
+                <div class="space-y-1">
+                    <div class="flex justify-between text-xs text-slate-300">
+                        <span>Zosilnenie v tme (Gain / Sensitivity)</span>
+                        <span id="gainValText" class="text-emerald-400 font-mono">2.5x</span>
+                    </div>
+                    <input id="sliderGain" type="range" min="1.0" max="5.0" step="0.1" value="2.5" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer">
+                </div>
+
+                <!-- Wall / Glow Thermal Aura Intensity -->
+                <div class="space-y-1">
+                    <div class="flex justify-between text-xs text-slate-300">
+                        <span>Detekcia & Glow Sviečkovanie</span>
+                        <span id="glowValText" class="text-emerald-400 font-mono">70%</span>
+                    </div>
+                    <input id="sliderGlow" type="range" min="0" max="100" value="70" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer">
+                </div>
+
+                <!-- Digital Grain Noise -->
+                <div class="space-y-1">
+                    <div class="flex justify-between text-xs text-slate-300">
+                        <span>Šum senzora (Digital Grain)</span>
+                        <span id="noiseValText" class="text-emerald-400 font-mono">25%</span>
+                    </div>
+                    <input id="sliderNoise" type="range" min="0" max="100" value="25" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer">
+                </div>
+
+                <!-- Contrast / Exposure Boost -->
+                <div class="space-y-1">
+                    <div class="flex justify-between text-xs text-slate-300">
+                        <span>Kontrast & Expozícia</span>
+                        <span id="contrastValText" class="text-emerald-400 font-mono">1.4x</span>
+                    </div>
+                    <input id="sliderContrast" type="range" min="0.8" max="3.0" step="0.1" value="1.4" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer">
+                </div>
+            </div>
+
+            <!-- HUD VISUAL TOGGLES -->
+            <div class="p-4 border-b border-slate-800/80 space-y-2">
+                <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Efekty a Vzhľad HUD</label>
+
+                <label class="flex items-center justify-between text-xs text-slate-300 cursor-pointer p-1.5 hover:bg-slate-800/50 rounded">
+                    <span>Taktická HUD Mriežka</span>
+                    <input id="chkHud" type="checkbox" checked class="rounded bg-slate-800 border-slate-700 text-emerald-500 focus:ring-0">
+                </label>
+
+                <label class="flex items-center justify-between text-xs text-slate-300 cursor-pointer p-1.5 hover:bg-slate-800/50 rounded">
+                    <span>Scanlines (CRT Efekt)</span>
+                    <input id="chkScanlines" type="checkbox" checked class="rounded bg-slate-800 border-slate-700 text-emerald-500 focus:ring-0">
+                </label>
+
+                <label class="flex items-center justify-between text-xs text-slate-300 cursor-pointer p-1.5 hover:bg-slate-800/50 rounded">
+                    <span>Zvukový Zvlnený Zvuk NVG (Hum)</span>
+                    <input id="chkAudioHum" type="checkbox" class="rounded bg-slate-800 border-slate-700 text-emerald-500 focus:ring-0">
+                </label>
+            </div>
+
+            <!-- RECORDING & CAPTURE CONTROLS -->
+            <div class="p-4 mt-auto space-y-3 bg-slate-900/90 border-t border-slate-800">
+                <div class="grid grid-cols-2 gap-2">
+                    <!-- Photo Snapshot -->
+                    <button id="btnSnapshot" class="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-hud text-xs font-bold flex items-center justify-center gap-2 border border-slate-700 transition">
+                        <i class="fa-solid fa-camera text-emerald-400 text-base"></i> FOTO
+                    </button>
+
+                    <!-- Record Video -->
+                    <button id="btnRecord" class="px-4 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl font-hud text-xs font-bold flex items-center justify-center gap-2 shadow-glow-red transition">
+                        <i class="fa-solid fa-video text-base"></i> <span id="recBtnLabel">NAHRAŤ</span>
+                    </button>
+                </div>
+
+                <!-- Preview / Recorded Video Modal Trigger -->
+                <div id="recordingResultBox" class="hidden p-3 bg-slate-800/90 border border-emerald-500/40 rounded-xl flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-circle-check text-emerald-400"></i>
+                        <span class="text-xs text-slate-200 font-semibold">Video Pripravené!</span>
+                    </div>
+                    <a id="downloadVideoBtn" download="night_vision_capture.webm" class="px-3 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded text-xs transition">
+                        <i class="fa-solid fa-download"></i> Stiahnuť
+                    </a>
+                </div>
+            </div>
+
+        </aside>
+
     </div>
 
     <script>
-        const video = document.getElementById('webcam');
-        const canvas = document.getElementById('outputCanvas');
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        
-        const modeSelect = document.getElementById('modeSelect');
-        const resSelect = document.getElementById('resSelect');
-        const gainSlider = document.getElementById('gainSlider');
-        const glowSlider = document.getElementById('glowSlider');
-        const recBtn = document.getElementById('recBtn');
-        const recStatus = document.getElementById('recStatus');
-        const recTimer = document.getElementById('recTimer');
-        const fpsCounter = document.getElementById('fpsCounter');
-        const gainIndicator = document.getElementById('gainIndicator');
-        const resIndicator = document.getElementById('resIndicator');
-
-        let mediaRecorder;
-        let recordedChunks = [];
-        let isRecording = false;
-        let recStartTime = 0;
-        let lastFrameTime = performance.now();
-        let frameCount = 0;
-        let fps = 60;
-
-        // Rozlíšenia
-        const resolutions = {
-            'yt-shorts': { w: 1080, h: 1920 },
-            '1080p': { w: 1920, h: 1080 },
-            '4k': { w: 3840, h: 2160 },
-            '720p': { w: 1280, h: 720 }
+        // Global Application State
+        const state = {
+            mode: 'green', // green, thermal, xray, amber, cyber, ir_bw
+            aspect: '16:9', // 16:9 or 9:16
+            res: '1080p60', // 720p, 1080p60, 4K
+            gain: 2.5,
+            glow: 70,
+            noise: 25,
+            contrast: 1.4,
+            hudVisible: true,
+            scanlinesVisible: true,
+            audioHum: false,
+            isRecording: false,
+            recordingTime: 0,
+            mediaRecorder: null,
+            recordedChunks: [],
+            torchOn: false,
+            streamTrack: null,
+            audioCtx: null,
+            humOsc: null,
+            humGain: null
         };
 
-        async function initCamera() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        width: { ideal: 1920 },
-                        height: { ideal: 1080 },
-                        frameRate: { ideal: 60 }
-                    },
-                    audio: true
-                });
-                video.srcObject = stream;
-                video.play();
-                updateCanvasResolution();
-                requestAnimationFrame(renderLoop);
-            } catch (err) {
-                alert("Chyba pri zapínaní kamery: " + err.message);
-            }
-        }
+        // DOM Element Cache
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('canvasOut');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const cameraSelect = document.getElementById('cameraSelect');
+        const resSelect = document.getElementById('resSelect');
+        const aspect169 = document.getElementById('aspect169');
+        const aspect916 = document.getElementById('aspect916');
+        const btnRecord = document.getElementById('btnRecord');
+        const recBtnLabel = document.getElementById('recBtnLabel');
+        const btnSnapshot = document.getElementById('btnSnapshot');
+        const btnTorch = document.getElementById('btnTorch');
+        const toast = document.getElementById('toast');
+        const toastMsg = document.getElementById('toastMsg');
+        const hudOverlay = document.getElementById('hudOverlay');
+        const hudVignette = document.getElementById('hudVignette');
+        const recordingTimer = document.getElementById('recordingTimer');
+        const recDot = document.getElementById('recDot');
+        const recordingResultBox = document.getElementById('recordingResultBox');
+        const downloadVideoBtn = document.getElementById('downloadVideoBtn');
+        const hudFps = document.getElementById('hudFps');
+        const hudClock = document.getElementById('hudClock');
+
+        let frameCount = 0;
+        let lastFpsTime = performance.now();
+        let recordingInterval = null;
 
         function updateCanvasResolution() {
-            const config = resolutions[resSelect.value];
-            canvas.width = config.w;
-            canvas.height = config.h;
-            resIndicator.innerText = `RES: ${config.w}x${config.h} @60FPS`;
-        }
+            let width = 1920;
+            let height = 1080;
 
-        resSelect.addEventListener('change', updateCanvasResolution);
-
-        gainSlider.addEventListener('input', () => {
-            gainIndicator.innerText = `LIGHT GAIN: +${Math.round(gainSlider.value * 100)}%`;
-        });
-
-        // Spracovanie obrazu & GLOW BIO/WALL algoritmus
-        function renderLoop(timestamp) {
-            frameCount++;
-            if (timestamp - lastFrameTime >= 1000) {
-                fps = frameCount;
-                frameCount = 0;
-                lastFrameTime = timestamp;
-                fpsCounter.innerText = `FPS: ${fps}`;
+            if (state.res === '720p') {
+                width = 1280;
+                height = 720;
+            } else if (state.res === '1080p60') {
+                width = 1920;
+                height = 1080;
+            } else if (state.res === '4K') {
+                width = 3840;
+                height = 2160;
             }
 
-            if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                // Vykreslenie videa do canvasu podľa vybraného formátu
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            // Adjust aspect ratio dimensions
+            if (state.aspect === '9:16') {
+                const temp = width;
+                width = height;
+                height = temp; // Swap dimensions for Vertical Shorts
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+
+            // Update aspect wrapper aspect class
+            const wrapper = document.getElementById('viewfinderWrapper');
+            if (state.aspect === '9:16') {
+                wrapper.style.maxWidth = '450px';
+                wrapper.style.aspectRatio = '9/16';
+            } else {
+                wrapper.style.maxWidth = '100%';
+                wrapper.style.aspectRatio = '16/9';
+            }
+        }
+
+        async function initCamera(deviceId = null) {
+            try {
+                if (window.currentStream) {
+                    window.currentStream.getTracks().forEach(track => track.stop());
+                }
+
+                const constraints = {
+                    video: {
+                        deviceId: deviceId ? { exact: deviceId } : undefined,
+                        width: { ideal: state.res === '4K' ? 3840 : 1920 },
+                        height: { ideal: state.res === '4K' ? 2160 : 1080 },
+                        frameRate: { ideal: 60, min: 30 }
+                    },
+                    audio: true
+                };
+
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                window.currentStream = stream;
+                video.srcObject = stream;
                 
-                let imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                let d = imgData.data;
+                // Track for flash/torch control
+                const videoTrack = stream.getVideoTracks()[0];
+                state.streamTrack = videoTrack;
 
-                let gain = parseFloat(gainSlider.value);
-                let glowIntensity = parseFloat(glowSlider.value) / 100;
-                let mode = modeSelect.value;
+                // Populate camera devices list if not already
+                if (cameraSelect.options.length <= 1) {
+                    populateCameraDevices();
+                }
 
-                // Prechod cez pixely
-                for (let i = 0; i < d.length; i += 4) {
-                    let r = d[i];
-                    let g = d[i + 1];
-                    let b = d[i + 2];
+                showToast("Kamera bola úspešne spustená");
+            } catch (err) {
+                console.warn("Kamera nedostupná alebo zamietnutá. Používam fallback simulačný systém.", err);
+                showToast("Realne video nedostupné - spustený NVG Test Pattern");
+                createFallbackVideoPattern();
+            }
+        }
 
-                    // Zosilnenie svetla v tme (Night Vision Boost)
-                    let brightness = (0.299 * r + 0.587 * g + 0.114 * b) * gain;
-                    
-                    // Simulácia šumu fotónov (Night Grain)
-                    let noise = (Math.random() - 0.5) * 25;
-                    brightness += noise;
-                    brightness = Math.min(255, Math.max(0, brightness));
+        async function populateCameraDevices() {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(d => d.kind === 'videoinput');
+                
+                cameraSelect.innerHTML = '';
+                videoDevices.forEach((device, index) => {
+                    const option = document.createElement('option');
+                    option.value = device.deviceId;
+                    option.text = device.label || `Kamera ${index + 1}`;
+                    cameraSelect.appendChild(option);
+                });
+            } catch (e) {
+                console.error("Chyba pri načítaní zariadení:", e);
+            }
+        }
 
-                    // Glow/Aura efekt na hranách/siluetách (Bio Aura)
-                    let edgeGlow = (r > 100 || g > 100 || b > 100) ? glowIntensity * 50 : 0;
+        function createFallbackVideoPattern() {
+            // Generates synthetic dynamic canvas input if no camera is attached
+            const dummyCanvas = document.createElement('canvas');
+            dummyCanvas.width = 1280;
+            dummyCanvas.height = 720;
+            const dCtx = dummyCanvas.getContext('2d');
 
-                    if (mode === 'night-green') {
-                        d[i] = edgeGlow * 0.2;                         // R
-                        d[i + 1] = brightness + edgeGlow;             // G (Silná zelená)
-                        d[i + 2] = edgeGlow * 0.4;                    // B
+            let angle = 0;
+            function renderDummy() {
+                angle += 0.03;
+                dCtx.fillStyle = '#050b14';
+                dCtx.fillRect(0, 0, 1280, 720);
+
+                // Moving person silhouette
+                const x = 640 + Math.sin(angle) * 300;
+                dCtx.fillStyle = '#1e293b';
+                // Head
+                dCtx.beginPath();
+                dCtx.arc(x, 300, 45, 0, Math.PI * 2);
+                dCtx.fill();
+                // Body
+                dCtx.fillRect(x - 50, 350, 100, 200);
+
+                // Wall line
+                dCtx.strokeStyle = '#334155';
+                dCtx.lineWidth = 8;
+                dCtx.beginPath();
+                dCtx.moveTo(400, 100);
+                dCtx.lineTo(400, 620);
+                dCtx.stroke();
+
+                const stream = dummyCanvas.captureStream(60);
+                video.srcObject = stream;
+                video.play();
+
+                requestAnimationFrame(renderDummy);
+            }
+            renderDummy();
+        }
+
+        function processVideoFrame() {
+            if (video.readyState >= video.HAVE_CURRENT_DATA) {
+                const w = canvas.width;
+                const h = canvas.height;
+
+                // Draw raw frame scaled to canvas
+                ctx.drawImage(video, 0, 0, w, h);
+
+                // Acquire frame pixel data
+                const frame = ctx.getImageData(0, 0, w, h);
+                const data = frame.data;
+                const len = data.length;
+
+                const gain = state.gain;
+                const glowFactor = state.glow / 50;
+                const contrastFactor = state.contrast;
+
+                // Color Map transformations
+                for (let i = 0; i < len; i += 4) {
+                    let r = data[i];
+                    let g = data[i + 1];
+                    let b = data[i + 2];
+
+                    // Luminance calculation
+                    let luminance = (0.299 * r + 0.587 * g + 0.114 * b);
+
+                    // High gain dark light boost (enhances dim shadows)
+                    luminance = Math.min(255, luminance * gain * contrastFactor);
+
+                    // Wall Glow / Outline Heat Detection simulation (difference filter)
+                    let heatGlow = 0;
+                    if (state.mode === 'xray' || state.glow > 0) {
+                        // High pass detection for skin tones / bright silhouettes
+                        const warmth = (r * 1.2) - (b * 0.8);
+                        if (warmth > 30 || luminance > 120) {
+                            heatGlow = Math.min(255, warmth * glowFactor * 1.5);
+                        }
+                    }
+
+                    // Apply vision preset colors
+                    if (state.mode === 'green') {
+                        // Classic Phosphor Green NVG
+                        data[i] = luminance * 0.1;               // Red low
+                        data[i + 1] = Math.min(255, luminance + heatGlow); // Bright Emerald Green
+                        data[i + 2] = luminance * 0.15;              // Subtle Teal Tint
                     } 
-                    else if (mode === 'white-phosphor') {
-                        d[i] = brightness * 0.85 + edgeGlow;
-                        d[i + 1] = brightness + edgeGlow;
-                        d[i + 2] = brightness * 1.15 + edgeGlow * 1.5; // Studená modro-biela
+                    else if (state.mode === 'thermal') {
+                        // FLIR Ironbow Thermal Palette
+                        const normLum = luminance / 255;
+                        if (normLum < 0.25) { // Dark / Cold -> Deep Blue
+                            data[i] = 0;
+                            data[i + 1] = normLum * 4 * 128;
+                            data[i + 2] = 180 + normLum * 4 * 75;
+                        } else if (normLum < 0.6) { // Warm -> Purple / Red
+                            data[i] = (normLum - 0.25) * 2.8 * 255;
+                            data[i + 1] = 0;
+                            data[i + 2] = 200 - (normLum - 0.25) * 2.8 * 200;
+                        } else if (normLum < 0.85) { // Hot -> Yellow/Orange
+                            data[i] = 255;
+                            data[i + 1] = (normLum - 0.6) * 4 * 255;
+                            data[i + 2] = 0;
+                        } else { // Extreme Heat -> White Hot Glow
+                            data[i] = 255;
+                            data[i + 1] = 255;
+                            data[i + 2] = (normLum - 0.85) * 6.6 * 255;
+                        }
                     } 
-                    else if (mode === 'thermal-predator') {
-                        // Termovízia FLIR (Ironbow)
-                        let heat = brightness + edgeGlow;
-                        d[i] = heat > 128 ? 255 : heat * 2;            // Red
-                        d[i + 1] = heat > 180 ? 255 : (heat > 80 ? heat : 0); // Yellow/Green
-                        d[i + 2] = heat < 128 ? 255 - heat * 2 : 0;   // Blue
+                    else if (state.mode === 'xray') {
+                        // Cybernetic Wall X-Ray Silhouette Glow Mode
+                        const edgeIntensity = Math.min(255, heatGlow * 2.5 + luminance * 0.5);
+                        data[i] = edgeIntensity * 0.2;
+                        data[i + 1] = Math.min(255, edgeIntensity * 1.8);
+                        data[i + 2] = Math.min(255, edgeIntensity * 2.2);
                     } 
-                    else if (mode === 'cyber-xray') {
-                        // Neónový fialovo-azúrový glow
-                        d[i] = (255 - brightness) * 0.5 + edgeGlow * 2;
-                        d[i + 1] = edgeGlow * 2;
-                        d[i + 2] = brightness + edgeGlow * 2.5;
+                    else if (state.mode === 'amber') {
+                        // Aviation High-Contrast Amber
+                        data[i] = Math.min(255, luminance * 1.2 + heatGlow); // Red High
+                        data[i + 1] = Math.min(255, luminance * 0.7);       // Green Mid
+                        data[i + 2] = 0;                                   // Blue None
                     } 
-                    else if (mode === 'red-spec') {
-                        d[i] = brightness * 1.3 + edgeGlow * 2;
-                        d[i + 1] = 0;
-                        d[i + 2] = 0;
+                    else if (state.mode === 'cyber') {
+                        // Sci-Fi Cobalt Blue Vision
+                        data[i] = luminance * 0.1;
+                        data[i + 1] = Math.min(255, luminance * 0.8 + heatGlow * 0.5);
+                        data[i + 2] = Math.min(255, luminance * 1.5 + heatGlow);
+                    } 
+                    else if (state.mode === 'ir_bw') {
+                        // IR Monochrome Black & White
+                        const finalL = Math.min(255, luminance + heatGlow * 0.5);
+                        data[i] = finalL;
+                        data[i + 1] = finalL;
+                        data[i + 2] = finalL;
                     }
                 }
 
-                ctx.putImageData(imgData, 0, 0);
+                // Add Sensor Grain Noise if enabled
+                if (state.noise > 0) {
+                    const noiseAmount = (state.noise / 100) * 40;
+                    for (let i = 0; i < len; i += 16) {
+                        const noiseVal = (Math.random() - 0.5) * noiseAmount;
+                        data[i] = Math.min(255, Math.max(0, data[i] + noiseVal));
+                        data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + noiseVal));
+                        data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + noiseVal));
+                    }
+                }
 
-                // Neónový HUD overlay vykreslený priamo do videa (pre nahrávanie)
-                drawTacticalHUD();
+                ctx.putImageData(frame, 0, 0);
             }
 
-            if (isRecording) {
-                let elapsed = Math.floor((Date.now() - recStartTime) / 1000);
-                let mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
-                let secs = String(elapsed % 60).padStart(2, '0');
-                recTimer.innerText = `${mins}:${secs}`;
+            // Calculate FPS Telemetry
+            frameCount++;
+            const now = performance.now();
+            if (now - lastFpsTime >= 1000) {
+                hudFps.innerText = frameCount;
+                frameCount = 0;
+                lastFpsTime = now;
             }
 
-            requestAnimationFrame(renderLoop);
+            requestAnimationFrame(processVideoFrame);
         }
 
-        // Kreslenie taktického radaru priamo do exportovaného videa
-        function drawTacticalHUD() {
-            ctx.strokeStyle = "rgba(0, 255, 100, 0.4)";
-            ctx.lineWidth = 2;
-            
-            // Rohové taktické zameriavače
-            const len = 40;
-            const w = canvas.width;
-            const h = canvas.height;
+        function toggleAudioHum(enable) {
+            if (enable) {
+                if (!state.audioCtx) {
+                    state.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (state.audioCtx.state === 'suspended') {
+                    state.audioCtx.resume();
+                }
+                state.humOsc = state.audioCtx.createOscillator();
+                state.humGain = state.audioCtx.createGain();
 
-            // TL
-            ctx.beginPath();
-            ctx.moveTo(30, 30 + len); ctx.lineTo(30, 30); ctx.lineTo(30 + len, 30);
-            // TR
-            ctx.moveTo(w - 30 - len, 30); ctx.lineTo(w - 30, 30); ctx.lineTo(w - 30, 30 + len);
-            // BL
-            ctx.moveTo(30, h - 30 - len); ctx.lineTo(30, h - 30); ctx.lineTo(30 + len, h - 30);
-            // BR
-            ctx.moveTo(w - 30 - len, h - 30); ctx.lineTo(w - 30, h - 30); ctx.lineTo(w - 30, h - 30 - len);
-            ctx.stroke();
-        }
+                state.humOsc.type = 'sine';
+                state.humOsc.frequency.setValueAtTime(60, state.audioCtx.currentTime); // 60Hz Electrical Hum
+                state.humGain.gain.setValueAtTime(0.02, state.audioCtx.currentTime); // Soft volume
 
-        // Nahrávanie videa
-        recBtn.addEventListener('click', () => {
-            if (!isRecording) {
-                startRecording();
+                state.humOsc.connect(state.humGain);
+                state.humGain.connect(state.audioCtx.destination);
+                state.humOsc.start();
             } else {
-                stopRecording();
+                if (state.humOsc) {
+                    state.humOsc.stop();
+                    state.humOsc.disconnect();
+                    state.humOsc = null;
+                }
             }
-        });
+        }
 
         function startRecording() {
-            recordedChunks = [];
-            const stream = canvas.captureStream(60); // 60 FPS Stream
+            state.recordedChunks = [];
+            const stream = canvas.captureStream(60); // Record smooth 60fps stream from Canvas
 
-            // Pridanie mikrofónu do záznamu
-            if (video.srcObject && video.srcObject.getAudioTracks().length > 0) {
-                stream.addTrack(video.srcObject.getAudioTracks()[0]);
+            // Include microphone sound if available
+            if (window.currentStream && window.currentStream.getAudioTracks().length > 0) {
+                stream.addTrack(window.currentStream.getAudioTracks()[0]);
             }
 
-            let options = { mimeType: 'video/webm; codecs=vp9' };
-            if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-                options = { mimeType: 'video/webm' };
+            const options = { mimeType: 'video/webm;codecs=vp9' };
+            try {
+                state.mediaRecorder = new MediaRecorder(stream, options);
+            } catch (e) {
+                state.mediaRecorder = new MediaRecorder(stream); // Fallback
             }
 
-            mediaRecorder = new MediaRecorder(stream, options);
-
-            mediaRecorder.ondataavailable = (e) => {
-                if (e.data.size > 0) recordedChunks.push(e.data);
+            state.mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) {
+                    state.recordedChunks.push(e.data);
+                }
             };
 
-            mediaRecorder.onstop = saveVideo;
+            state.mediaRecorder.onstop = () => {
+                const blob = new Blob(state.recordedChunks, { type: 'video/webm' });
+                const videoUrl = URL.createObjectURL(blob);
+                downloadVideoBtn.href = videoUrl;
+                downloadVideoBtn.download = `NVG_Record_${state.mode}_${Date.now()}.webm`;
+                recordingResultBox.classList.remove('hidden');
+                showToast("Nahrávanie dokončené! Video pripravené na stiahnutie.");
+            };
 
-            mediaRecorder.start(100);
-            isRecording = true;
-            recStartTime = Date.now();
-            recBtn.classList.add('recording');
-            recBtn.innerText = "⏹ ZASTAVIŤ A ULOŽIŤ";
-            recStatus.style.display = "block";
+            state.mediaRecorder.start(100); // 100ms chunks
+            state.isRecording = true;
+            state.recordingTime = 0;
+
+            recBtnLabel.innerText = "ZASTAVIŤ";
+            btnRecord.classList.remove('bg-red-600', 'hover:bg-red-500');
+            btnRecord.classList.add('bg-slate-700', 'hover:bg-slate-600', 'animate-pulse');
+            recDot.classList.remove('opacity-0');
+
+            recordingInterval = setInterval(() => {
+                state.recordingTime++;
+                const hrs = String(Math.floor(state.recordingTime / 3600)).padStart(2, '0');
+                const mins = String(Math.floor((state.recordingTime % 3600) / 60)).padStart(2, '0');
+                const secs = String(state.recordingTime % 60).padStart(2, '0');
+                recordingTimer.innerText = `${hrs}:${mins}:${secs}`;
+            }, 1000);
+
+            showToast("Nahrávanie spustené (60 FPS)...");
         }
 
         function stopRecording() {
-            mediaRecorder.stop();
-            isRecording = false;
-            recBtn.classList.remove('recording');
-            recBtn.innerText = "⏺ SPUSTIŤ NAHRÁVANIE";
-            recStatus.style.display = "none";
+            if (state.mediaRecorder && state.isRecording) {
+                state.mediaRecorder.stop();
+                state.isRecording = false;
+                clearInterval(recordingInterval);
+
+                recBtnLabel.innerText = "NAHRAŤ";
+                btnRecord.classList.add('bg-red-600', 'hover:bg-red-500');
+                btnRecord.classList.remove('bg-slate-700', 'hover:bg-slate-600', 'animate-pulse');
+                recDot.classList.add('opacity-0');
+            }
         }
 
-        function saveVideo() {
-            const blob = new Blob(recordedChunks, { type: 'video/webm' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = url;
-            a.download = `NIGHT_VISION_${resSelect.value}_${Date.now()}.webm`;
-            document.body.appendChild(a);
-            a.click();
+        function takeSnapshot() {
+            const link = document.createElement('a');
+            link.download = `NVG_Snapshot_${state.mode}_${Date.now()}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+            showToast("Fotografia uložená do zariadenia!");
+        }
+
+        function showToast(msg) {
+            toastMsg.innerText = msg;
+            toast.classList.remove('opacity-0');
             setTimeout(() => {
-                document.body.removeChild(a);
-                window.URL.revokeObjectURL(url);
-            }, 100);
+                toast.classList.add('opacity-0');
+            }, 3000);
         }
 
-        window.addEventListener('load', initCamera);
+        function initEventListeners() {
+            // Preset Mode Switcher
+            document.querySelectorAll('.mode-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('.mode-btn').forEach(b => {
+                        b.classList.remove('bg-emerald-950/80', 'border-emerald-500/60', 'text-emerald-400', 'shadow-glow-green');
+                        b.classList.add('bg-slate-800', 'border-slate-700', 'text-slate-300');
+                    });
+
+                    const target = e.currentTarget;
+                    target.classList.remove('bg-slate-800', 'border-slate-700', 'text-slate-300');
+                    target.classList.add('bg-emerald-950/80', 'border-emerald-500/60', 'text-emerald-400', 'shadow-glow-green');
+
+                    state.mode = target.getAttribute('data-mode');
+                    document.getElementById('hdr-mode-badge').innerText = state.mode.toUpperCase();
+                    document.getElementById('hudSpectrumName').innerText = state.mode.toUpperCase();
+                    showToast(`Režim zmenený: ${state.mode.toUpperCase()}`);
+                });
+            });
+
+            // Aspect Ratio Switches
+            aspect169.addEventListener('click', () => {
+                state.aspect = '16:9';
+                aspect169.className = "px-2 py-0.5 rounded text-xs bg-emerald-500 text-slate-950 font-bold transition";
+                aspect916.className = "px-2 py-0.5 rounded text-xs text-slate-400 hover:text-white transition";
+                updateCanvasResolution();
+                showToast("Formát: 16:9 (YouTube Standard)");
+            });
+
+            aspect916.addEventListener('click', () => {
+                state.aspect = '9:16';
+                aspect916.className = "px-2 py-0.5 rounded text-xs bg-emerald-500 text-slate-950 font-bold transition";
+                aspect169.className = "px-2 py-0.5 rounded text-xs text-slate-400 hover:text-white transition";
+                updateCanvasResolution();
+                showToast("Formát: 9:16 (YouTube Shorts / TikTok)");
+            });
+
+            // Resolution Switcher
+            resSelect.addEventListener('change', (e) => {
+                state.res = e.target.value;
+                updateCanvasResolution();
+                showToast(`Rozlíšenie zmenené na ${state.res}`);
+            });
+
+            // Camera Device Switch
+            cameraSelect.addEventListener('change', (e) => {
+                initCamera(e.target.value);
+            });
+
+            // Sliders
+            document.getElementById('sliderGain').addEventListener('input', (e) => {
+                state.gain = parseFloat(e.target.value);
+                document.getElementById('gainValText').innerText = `${state.gain}x`;
+                document.getElementById('hudGainVal').innerText = `${state.gain}x`;
+            });
+
+            document.getElementById('sliderGlow').addEventListener('input', (e) => {
+                state.glow = parseInt(e.target.value);
+                document.getElementById('glowValText').innerText = `${state.glow}%`;
+            });
+
+            document.getElementById('sliderNoise').addEventListener('input', (e) => {
+                state.noise = parseInt(e.target.value);
+                document.getElementById('noiseValText').innerText = `${state.noise}%`;
+            });
+
+            document.getElementById('sliderContrast').addEventListener('input', (e) => {
+                state.contrast = parseFloat(e.target.value);
+                document.getElementById('contrastValText').innerText = `${state.contrast}x`;
+            });
+
+            // Checkboxes
+            document.getElementById('chkHud').addEventListener('change', (e) => {
+                hudOverlay.style.display = e.target.checked ? 'flex' : 'none';
+            });
+
+            document.getElementById('chkScanlines').addEventListener('change', (e) => {
+                hudVignette.style.display = e.target.checked ? 'block' : 'none';
+            });
+
+            document.getElementById('chkAudioHum').addEventListener('change', (e) => {
+                state.audioHum = e.target.checked;
+                toggleAudioHum(state.audioHum);
+            });
+
+            // Record & Snapshot Actions
+            btnRecord.addEventListener('click', () => {
+                if (!state.isRecording) {
+                    startRecording();
+                } else {
+                    stopRecording();
+                }
+            });
+
+            btnSnapshot.addEventListener('click', takeSnapshot);
+
+            // Flashlight / Torch toggle
+            btnTorch.addEventListener('click', async () => {
+                if (state.streamTrack && typeof state.streamTrack.applyConstraints === 'function') {
+                    try {
+                        state.torchOn = !state.torchOn;
+                        await state.streamTrack.applyConstraints({
+                            advanced: [{ torch: state.torchOn }]
+                        });
+                        btnTorch.classList.toggle('text-yellow-400', state.torchOn);
+                        showToast(state.torchOn ? "IR Svietidlo ZAPNUTÉ" : "IR Svietidlo VYPNUTÉ");
+                    } catch (err) {
+                        showToast("Blesk / Svietidlo nie je dostupné na tomto zariadení");
+                    }
+                } else {
+                    showToast("Blesk nie je podporovaný prehliadačom");
+                }
+            });
+
+            // Fullscreen
+            document.getElementById('btnFullscreen').addEventListener('click', () => {
+                if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen();
+                } else {
+                    document.exitFullscreen();
+                }
+            });
+
+            // Real-time HUD Clock Update
+            setInterval(() => {
+                const d = new Date();
+                hudClock.innerText = d.toUTCString().split(' ')[4] + ' UTC';
+            }, 1000);
+        }
+
+        window.onload = function() {
+            updateCanvasResolution();
+            initEventListeners();
+            initCamera();
+            requestAnimationFrame(processVideoFrame);
+        };
     </script>
 </body>
 </html>
