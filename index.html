@@ -2,642 +2,475 @@
 <html lang="sk">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SPECTER-OS v5.0 // Quantum Wall-Penetration & Ghost HUD</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Three.js pre 3D Duchov a Monštrá -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MIL-SPEC NIGHT VISION & AURA SCANNER</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@500;700;900&display=swap');
+        :root {
+            --nv-green: #00ff66;
+            --nv-glow: rgba(0, 255, 102, 0.4);
+            --hud-font: 'Courier New', Courier, monospace;
+        }
 
         * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
             user-select: none;
-            -webkit-user-select: none;
-            touch-action: manipulation;
-            font-family: 'Share Tech Mono', monospace;
         }
 
-        .font-cyber { font-family: 'Orbitron', sans-serif; }
+        body {
+            background-color: #050805;
+            color: var(--nv-green);
+            font-family: var(--hud-font);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
 
-        /* Filtre nočného videnia */
-        .nv-green { filter: brightness(1.25) contrast(1.6) hue-rotate(65deg) saturate(3.5); }
-        .nv-thermal { filter: brightness(1.3) contrast(2.2) invert(1) hue-rotate(180deg) saturate(6); }
-        .nv-red { filter: brightness(1.1) contrast(1.8) hue-rotate(310deg) saturate(4.5); }
-        .nv-uv { filter: brightness(1.2) contrast(1.5) hue-rotate(250deg) saturate(4); }
-        .nv-xray { filter: brightness(1.4) contrast(3) grayscale(1) invert(0.9); }
+        /* Viewport kontajner */
+        #viewport {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+        }
 
-        .scanlines {
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.45) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.04), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.04));
-            background-size: 100% 3px, 3px 100%;
+        video {
+            display: none;
+        }
+
+        canvas {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.9);
+        }
+
+        /* Scanlines & CRT efekt */
+        .overlay-crt {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+            background-size: 100% 3px, 6px 100%;
             pointer-events: none;
+            z-index: 10;
         }
 
-        .radar-sweep {
-            background: conic-gradient(from 0deg at 50% 50%, rgba(34, 197, 94, 0.45) 0deg, rgba(34, 197, 94, 0) 65deg);
-            animation: radarRotate 2.2s linear infinite;
+        /* Taktický HUD Display */
+        .hud-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 15;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+            text-shadow: 0 0 8px var(--nv-green);
         }
 
-        @keyframes radarRotate {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
+        .hud-header, .hud-footer {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            letter-spacing: 2px;
         }
 
-        /* Pulzujúci termálny prienik cez steny */
-        @keyframes wallPulse {
-            0% { transform: scale(0.98); opacity: 0.6; }
-            50% { transform: scale(1.02); opacity: 0.95; filter: drop-shadow(0 0 15px #22c55e); }
-            100% { transform: scale(0.98); opacity: 0.6; }
+        .hud-reticle {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 260px;
+            height: 260px;
+            border: 1px dashed var(--nv-green);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0.7;
         }
-        .wall-target-anim { animation: wallPulse 2.5s infinite ease-in-out; }
+
+        .hud-reticle::before {
+            content: '';
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            border: 2px solid var(--nv-green);
+        }
+
+        .rec-dot {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            background: red;
+            border-radius: 50%;
+            margin-right: 6px;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+
+        /* Kontrolný panel */
+        .control-panel {
+            position: absolute;
+            bottom: 25px;
+            z-index: 20;
+            background: rgba(0, 15, 5, 0.85);
+            border: 1px solid var(--nv-green);
+            box-shadow: 0 0 20px var(--nv-glow);
+            padding: 12px 20px;
+            border-radius: 8px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(8px);
+        }
+
+        button, select {
+            background: rgba(0, 30, 10, 0.9);
+            border: 1px solid var(--nv-green);
+            color: var(--nv-green);
+            padding: 8px 14px;
+            font-family: var(--hud-font);
+            font-weight: bold;
+            font-size: 13px;
+            border-radius: 4px;
+            cursor: pointer;
+            text-shadow: 0 0 4px var(--nv-green);
+            transition: 0.2s all;
+        }
+
+        button:hover, select:hover {
+            background: var(--nv-green);
+            color: #000;
+            box-shadow: 0 0 12px var(--nv-green);
+        }
+
+        .btn-record {
+            background: #400;
+            border-color: #f33;
+            color: #f66;
+            text-shadow: 0 0 4px #f33;
+        }
+
+        .btn-record.recording {
+            background: #f00;
+            color: #fff;
+            box-shadow: 0 0 15px #f00;
+        }
+
+        .slider-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+        }
+
+        input[type="range"] {
+            accent-color: var(--nv-green);
+            cursor: pointer;
+        }
     </style>
 </head>
-<body class="bg-black text-green-500 h-screen w-screen overflow-hidden flex justify-center items-center">
+<body>
 
-    <!-- HLAVNÝ MOBILNÝ KONTAJNER 16:9 -->
-    <div id="app-viewport" class="relative w-full h-full max-w-[480px] max-h-[960px] aspect-[9/16] bg-black overflow-hidden flex flex-col justify-between border-x border-green-900/50 shadow-2xl">
+    <div id="viewport">
+        <video id="webcam" autoplay playsinline></video>
+        <canvas id="outputCanvas"></canvas>
+        <div class="overlay-crt"></div>
 
-        <!-- ========================================================== -->
-        <!-- 1. OBRAZOVKA: INŠTALÁCIA 999 MB (4 MINÚTY V REÁLNOM ČASE) -->
-        <!-- ========================================================== -->
-        <div id="screen-install" class="absolute inset-0 z-50 bg-black flex flex-col justify-between p-6">
-            <div class="text-center mt-6">
-                <div class="inline-block p-4 border border-green-500/40 rounded-2xl bg-green-950/20 mb-3 shadow-lg shadow-green-500/20 animate-pulse">
-                    <i data-lucide="scan" class="w-12 h-12 text-green-400"></i>
-                </div>
-                <h1 class="font-cyber text-2xl font-black tracking-widest text-white">SPECTER<span class="text-green-500">-OS</span></h1>
-                <p class="text-[11px] text-green-400/80 uppercase tracking-widest mt-1">QUANTUM THRU-WALL & SPECTRAL SUITE v5.0</p>
-                <div class="inline-block mt-2 px-3 py-0.5 bg-red-950/60 border border-red-500/40 text-red-400 text-[10px] font-bold rounded">
-                    VEĽKOSŤ BALÍKA: 999.00 MB
-                </div>
+        <!-- HUD Taktické prvky -->
+        <div class="hud-layer">
+            <div class="hud-header">
+                <div>SYS: ONLINE // NV-GEN4</div>
+                <div id="recStatus" style="display: none;"><span class="rec-dot"></span>REC [<span id="recTimer">00:00</span>]</div>
+                <div id="fpsCounter">FPS: 60</div>
             </div>
-
-            <!-- TERMINÁL S PREBIEHAJÚCIMI OPERÁCIAMI -->
-            <div class="space-y-3">
-                <div class="flex justify-between items-end text-xs font-mono">
-                    <span class="text-green-400 font-bold">ČAS DO DOKONČENIA:</span>
-                    <span id="install-timer" class="text-white font-cyber font-bold text-sm">04:00</span>
-                </div>
-
-                <div id="install-terminal" class="h-32 bg-zinc-950 border border-green-900/70 p-3 rounded-lg font-mono text-[10px] space-y-1 text-green-400/90 overflow-hidden flex flex-col justify-end">
-                    <div>> Inicializácia inštalačného protokolu...</div>
-                </div>
-
-                <div class="space-y-1">
-                    <div class="flex justify-between text-xs font-mono">
-                        <span id="install-downloaded" class="text-green-400">0.00 MB / 999.00 MB</span>
-                        <span id="install-pct" class="font-bold text-white">0.0%</span>
-                    </div>
-                    <div class="w-full bg-zinc-900 h-2.5 rounded-full overflow-hidden border border-green-900/80 p-0.5">
-                        <div id="install-bar" class="bg-gradient-to-r from-green-600 to-emerald-400 h-full w-0 transition-all duration-200 rounded-full"></div>
-                    </div>
-                    <div class="flex justify-between text-[9px] text-zinc-500">
-                        <span>RÝCHLOSŤ: <span id="download-speed" class="text-green-400 font-mono">4.16 MB/s</span></span>
-                        <span>KANÁL: ENCRYPTED-SAT-4</span>
-                    </div>
-                </div>
-            </div>
-
-            <button id="btn-start-auth" class="hidden w-full py-4 bg-green-500 text-black font-cyber font-bold rounded-lg tracking-widest text-sm hover:bg-green-400 transition shadow-lg shadow-green-500/40 animate-bounce">
-                SPUSTIŤ SYSTÉM (AUTORIZÁCIA)
-            </button>
-        </div>
-
-
-        <!-- ========================================================== -->
-        <!-- 2. OBRAZOVKA: PRIHLÁSENIE / REGISTRÁCIA -->
-        <!-- ========================================================== -->
-        <div id="screen-auth" class="hidden absolute inset-0 z-40 bg-black/95 backdrop-blur-md flex flex-col justify-between p-6">
-            <div class="text-center mt-8">
-                <i data-lucide="shield-check" class="w-12 h-12 text-green-400 mx-auto mb-2"></i>
-                <h2 class="font-cyber text-xl font-bold text-white tracking-wider">BEZPEČNOSTNÝ PRÍSTUP</h2>
-                <p class="text-xs text-green-500/60">Taktický výskum anomálií & prienik cez prekážky</p>
-            </div>
-
-            <div class="space-y-4">
-                <div class="flex border-b border-green-900 text-sm">
-                    <button class="flex-1 py-2 text-green-400 border-b-2 border-green-500 font-bold">PRIHLÁSENIE AGENTA</button>
-                    <button class="flex-1 py-2 text-green-800 font-bold">REGISTRÁCIA</button>
-                </div>
-
-                <div class="space-y-3">
-                    <div>
-                        <label class="text-[10px] text-green-400 tracking-wider">IDENTIFIKÁTOR OPERÁTORA</label>
-                        <input type="text" value="AGENT_PARANORMAL_09" class="w-full bg-zinc-900/90 border border-green-800 rounded p-3 text-white text-xs focus:border-green-400 outline-none">
-                    </div>
-                    <div>
-                        <label class="text-[10px] text-green-400 tracking-wider">KLASIFIKOVANÉ HESLO</label>
-                        <input type="password" value="••••••••••••" class="w-full bg-zinc-900/90 border border-green-800 rounded p-3 text-white text-xs focus:border-green-400 outline-none">
-                    </div>
-                </div>
-
-                <button id="btn-login-submit" class="w-full py-4 bg-green-500 text-black font-cyber font-bold rounded tracking-widest text-xs transition flex items-center justify-center gap-2 hover:bg-green-400">
-                    <i data-lucide="scan-face" class="w-5 h-5"></i> AUTORIZOVAŤ A OTVORIŤ SKENER
-                </button>
-            </div>
-
-            <p class="text-[10px] text-center text-zinc-600">Specter Quantum Sub-Surface Clearance Lv.5</p>
-        </div>
-
-
-        <!-- ========================================================== -->
-        <!-- 3. HLAVNÝ SKENER (HUD + 3D PRÍZRAKY + PRIENIK CEZ STENY) -->
-        <!-- ========================================================== -->
-        <div id="screen-scanner" class="hidden relative w-full h-full flex flex-col justify-between overflow-hidden">
             
-            <!-- Živý stream z kamery -->
-            <video id="camera-stream" autoplay playsinline muted class="absolute inset-0 w-full h-full object-cover nv-green transition-all duration-300"></video>
-            
-            <!-- 3D WebGL Plátno (Three.js Monštrá) -->
-            <canvas id="three-canvas" class="absolute inset-0 w-full h-full pointer-events-none z-10"></canvas>
-
-            <!-- SCANLINES EFEKT -->
-            <div class="scanlines absolute inset-0 z-20"></div>
-
-            <!-- VRSTVA PRIENIKU CEZ STENY (X-RAY SILUETY & MERANIE VZDIALENOSTI) -->
-            <div id="thru-wall-layer" class="absolute inset-0 z-25 pointer-events-none flex items-center justify-center transition-opacity duration-500">
-                <!-- Silueta postavy cez stenu -->
-                <div id="wall-human-target" class="absolute left-12 top-1/3 wall-target-anim border-2 border-dashed border-emerald-400/80 bg-emerald-500/20 p-2 rounded-lg backdrop-blur-[1px] hidden">
-                    <div class="flex items-center gap-2">
-                        <i data-lucide="user-x" class="w-8 h-8 text-emerald-300"></i>
-                        <div class="text-[9px] font-mono text-emerald-300 leading-tight">
-                            <span class="font-bold text-white bg-emerald-950 px-1">DETEKCIA ZA STENOU</span><br>
-                            VZDIALENOSŤ: <span class="font-bold text-white">3.4 m</span><br>
-                            TEP: <span class="text-red-400">78 BPM</span> (ČLOVEK)
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Druhý cieľ (Neznáma entita za stenou) -->
-                <div id="wall-specter-target" class="absolute right-8 bottom-1/3 wall-target-anim border-2 border-red-500/80 bg-red-950/30 p-2 rounded-lg hidden">
-                    <div class="flex items-center gap-2">
-                        <i data-lucide="flame" class="w-8 h-8 text-red-400 animate-bounce"></i>
-                        <div class="text-[9px] font-mono text-red-300 leading-tight">
-                            <span class="font-bold text-white bg-red-900 px-1">PRIENIK CEZ PREKÁŽKU</span><br>
-                            VZDIALENOSŤ: <span class="font-bold text-white">5.8 m</span><br>
-                            PODPIS: <span class="text-yellow-400">SPEKTRÁLNE MONŠTRUM</span>
-                        </div>
-                    </div>
-                </div>
+            <div class="hud-reticle">
+                <div style="font-size: 10px; position: absolute; top: 10px;">BIO-SCAN: ACTIVE</div>
+                <div style="font-size: 10px; position: absolute; bottom: 10px;">WALL-AURA: ON</div>
             </div>
 
-            <!-- HUD: HORNÝ PANEL -->
-            <div class="relative z-30 p-4 bg-gradient-to-b from-black/90 via-black/40 to-transparent space-y-2">
-                <div class="flex justify-between items-center text-xs">
-                    <div class="flex items-center gap-2">
-                        <span class="w-2.5 h-2.5 rounded-full bg-red-600 animate-ping"></span>
-                        <span class="font-cyber font-bold tracking-wider text-white">REC 1080p60 HQ</span>
-                    </div>
-                    <div id="rec-timer" class="text-red-500 font-bold hidden font-mono">00:00</div>
-                    <div class="flex items-center gap-2">
-                        <button id="btn-open-settings" class="p-1.5 bg-black/60 border border-green-500/40 rounded-lg text-green-400 hover:text-white">
-                            <i data-lucide="settings" class="w-4 h-4"></i>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- PREPÍNAČ REŽIMOV SKENOVANIA -->
-                <div class="flex justify-between items-center bg-black/70 backdrop-blur-md p-1.5 rounded-lg border border-green-500/30">
-                    <span class="text-[9px] font-bold text-white pl-1 uppercase">REŽIM:</span>
-                    <div class="flex gap-1">
-                        <button onclick="setFilter('nv-green')" class="px-2 py-0.5 text-[9px] bg-green-500/20 border border-green-500 rounded text-green-400">NOČNÉ ZELENÉ</button>
-                        <button onclick="setFilter('nv-thermal')" class="px-2 py-0.5 text-[9px] bg-yellow-500/20 border border-yellow-500 rounded text-yellow-400">TERMÁL</button>
-                        <button onclick="setFilter('nv-red')" class="px-2 py-0.5 text-[9px] bg-red-500/20 border border-red-500 rounded text-red-400">ČERVENÝ</button>
-                        <button onclick="setFilter('nv-xray')" class="px-2 py-0.5 text-[9px] bg-cyan-500/20 border border-cyan-500 rounded text-cyan-300">X-RAY PRIENIK</button>
-                    </div>
-                </div>
+            <div class="hud-footer">
+                <div id="resIndicator">RES: 1920x1080 @60FPS</div>
+                <div id="gainIndicator">LIGHT GAIN: +200%</div>
+                <div>ISO: AUTO (ULTRA-NIGHT)</div>
             </div>
-
-            <!-- HUD: STRED (EMF METER, RADAR, ZAMERIAVAČ) -->
-            <div class="relative z-30 flex-1 flex flex-col justify-between items-center px-4 pointer-events-none">
-                <div class="w-full flex items-center justify-between mt-1">
-                    <div class="bg-black/70 p-2 rounded border border-green-500/30">
-                        <div class="text-[8px] text-green-400">RADAR CEZ STENY (SONAR)</div>
-                        <div id="wall-radar-status" class="text-xs font-bold font-cyber text-emerald-400">AKTÍVNY • 2 CIELE</div>
-                    </div>
-
-                    <!-- MINIKOMPAS & RADAR -->
-                    <div class="relative w-16 h-16 rounded-full border border-green-500/40 bg-black/60 overflow-hidden flex items-center justify-center">
-                        <div class="absolute inset-0 radar-sweep"></div>
-                        <div id="radar-blip-1" class="absolute w-2 h-2 rounded-full bg-emerald-400 animate-ping" style="top: 25%; left: 30%;"></div>
-                        <div id="radar-blip-2" class="absolute w-2 h-2 rounded-full bg-red-500 animate-ping" style="bottom: 30%; right: 25%;"></div>
-                        <div class="w-1 h-1 rounded-full bg-white z-10"></div>
-                    </div>
-                </div>
-
-                <!-- HLAVNÝ ZAMERIAVACÍ KRUH -->
-                <div id="reticle" class="w-44 h-44 border border-green-500/30 rounded-full flex items-center justify-center relative transition-all duration-300">
-                    <div class="w-36 h-36 border border-dashed border-green-500/20 rounded-full animate-spin" style="animation-duration: 20s;"></div>
-                    <div class="w-2 h-2 bg-green-500/80 rounded-full"></div>
-                    <div class="absolute -top-3 text-[8px] bg-black px-1.5 border border-green-500/40 text-green-400">QUANTUM LOCK</div>
-                </div>
-
-                <!-- SPIRIT BOX & FREKVENCIA -->
-                <div class="bg-black/80 px-4 py-1 rounded border border-green-500/30 text-center mb-1">
-                    <span class="text-[9px] text-green-400/80">ZVUKOVÝ PREPIS ÉTERU: </span>
-                    <span id="spirit-sub" class="text-xs font-bold text-white tracking-wide">POČÚVAM FREKVENCIE...</span>
-                </div>
-            </div>
-
-            <!-- HUD: SPODNÝ OVLÁDACÍ PANEL -->
-            <div class="relative z-30 p-4 bg-gradient-to-t from-black/95 via-black/85 to-transparent">
-                <div class="flex justify-around items-center">
-                    
-                    <!-- Prepínač viditeľnosti cez steny -->
-                    <button id="btn-toggle-wall" class="flex flex-col items-center gap-1 text-emerald-400 active:scale-95 transition">
-                        <div class="p-3 bg-emerald-950/60 border border-emerald-500/50 rounded-full">
-                            <i data-lucide="eye" class="w-5 h-5"></i>
-                        </div>
-                        <span class="text-[8px] font-bold">CEZ STENY</span>
-                    </button>
-
-                    <!-- HLAVNÉ TLAČIDLO NAHRÁVANIA (Export 1080p60 do mobilu) -->
-                    <button id="btn-record" class="p-1 rounded-full border-2 border-red-500/60 hover:border-red-400 transition active:scale-95">
-                        <div id="rec-btn-core" class="w-14 h-14 bg-red-600 rounded-full flex items-center justify-center shadow-lg shadow-red-600/50">
-                            <i data-lucide="video" class="w-7 h-7 text-white"></i>
-                        </div>
-                    </button>
-
-                    <!-- Spawnovanie 3D Monštra -->
-                    <button id="btn-spawn" class="flex flex-col items-center gap-1 text-green-400 active:scale-95 transition">
-                        <div class="p-3 bg-green-950/60 border border-green-500/40 rounded-full">
-                            <i data-lucide="skull" class="w-5 h-5"></i>
-                        </div>
-                        <span class="text-[8px] font-bold">VYVOLAŤ</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- ========================================================== -->
-            <!-- 4. MODÁLNE OKNO: NASTAVENIA (SETTINGS) -->
-            <!-- ========================================================== -->
-            <div id="modal-settings" class="hidden absolute inset-0 z-50 bg-black/95 backdrop-blur-lg p-6 flex flex-col justify-between">
-                <div>
-                    <div class="flex justify-between items-center border-b border-green-900 pb-3 mb-4">
-                        <div class="flex items-center gap-2">
-                            <i data-lucide="sliders" class="w-5 h-5 text-green-400"></i>
-                            <h3 class="font-cyber font-bold text-white text-base">KONFIGURÁCIA SENZOROV</h3>
-                        </div>
-                        <button id="btn-close-settings" class="text-zinc-400 hover:text-white">
-                            <i data-lucide="x" class="w-6 h-6"></i>
-                        </button>
-                    </div>
-
-                    <div class="space-y-4 text-xs">
-                        <div>
-                            <label class="text-green-400 block mb-1">CITLIVOSŤ SKENOVANIA CEZ STENY</label>
-                            <input type="range" min="1" max="100" value="85" class="w-full accent-green-500">
-                        </div>
-
-                        <div>
-                            <label class="text-green-400 block mb-1">ROZLÍŠENIE A KVALITA ZÁZNAMU</label>
-                            <select class="w-full bg-zinc-900 border border-green-800 rounded p-2 text-white outline-none">
-                                <option>1080p 60 FPS (Ultra Tactical HD)</option>
-                                <option>4K 30 FPS (Quantum Spectral Max)</option>
-                                <option>720p 120 FPS (High-Speed Paranormal)</option>
-                            </select>
-                        </div>
-
-                        <div class="space-y-2 pt-2">
-                            <div class="flex justify-between items-center bg-zinc-900 p-2.5 rounded border border-green-900">
-                                <span class="text-white">Zvukový modul Spirit Box</span>
-                                <input type="checkbox" checked class="accent-green-500 w-4 h-4">
-                            </div>
-                            <div class="flex justify-between items-center bg-zinc-900 p-2.5 rounded border border-green-900">
-                                <span class="text-white">Detekcia tepu cez prekážky</span>
-                                <input type="checkbox" checked class="accent-green-500 w-4 h-4">
-                            </div>
-                            <div class="flex justify-between items-center bg-zinc-900 p-2.5 rounded border border-green-900">
-                                <span class="text-white">Ektoplazmatický zosilňovač</span>
-                                <input type="checkbox" checked class="accent-green-500 w-4 h-4">
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <button id="btn-save-settings" class="w-full py-3.5 bg-green-500 text-black font-cyber font-bold rounded text-xs tracking-wider">
-                    ULOŽIŤ A POKRAČOVAŤ V SKENOVANÍ
-                </button>
-            </div>
-
         </div>
 
+        <!-- Nastavovací panel -->
+        <div class="control-panel">
+            <select id="modeSelect">
+                <option value="night-green">🟢 NIGHT GREEN (Phosphor PVS-14)</option>
+                <option value="white-phosphor">⚪ WHITE PHOSPHOR (PVS-31)</option>
+                <option value="thermal-predator">🔥 THERMAL FLIR (Predator)</option>
+                <option value="cyber-xray">🟣 CYBER X-RAY / WALL-GLOW</option>
+                <option value="red-spec">🔴 RED TACTICAL</option>
+            </select>
+
+            <select id="resSelect">
+                <option value="yt-shorts">📱 YT SHORTS (1080x1920 / 9:16)</option>
+                <option value="1080p" selected>🎬 FULL HD (1920x1080 / 16:9)</option>
+                <option value="4k">🌟 4K UHD (3840x2160)</option>
+                <option value="720p">⚡ HD 720p</option>
+            </select>
+
+            <div class="slider-group">
+                <label>NOČNÉ SVETLO (GAIN):</label>
+                <input type="range" id="gainSlider" min="1" max="4" step="0.1" value="2.2">
+            </div>
+
+            <div class="slider-group">
+                <label>WALL GLOW / AURA:</label>
+                <input type="range" id="glowSlider" min="0" max="100" value="65">
+            </div>
+
+            <button id="recBtn" class="btn-record">⏺ SPUSTIŤ NAHRÁVANIE</button>
+        </div>
     </div>
 
-    <!-- ========================================================== -->
-    <!-- LOGIKA, AUDIO A THREE.JS SKRIPT -->
-    <!-- ========================================================== -->
     <script>
-        lucide.createIcons();
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('outputCanvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        
+        const modeSelect = document.getElementById('modeSelect');
+        const resSelect = document.getElementById('resSelect');
+        const gainSlider = document.getElementById('gainSlider');
+        const glowSlider = document.getElementById('glowSlider');
+        const recBtn = document.getElementById('recBtn');
+        const recStatus = document.getElementById('recStatus');
+        const recTimer = document.getElementById('recTimer');
+        const fpsCounter = document.getElementById('fpsCounter');
+        const gainIndicator = document.getElementById('gainIndicator');
+        const resIndicator = document.getElementById('resIndicator');
 
-        // -----------------------------------------------------------
-        // 1. ZVUKOVÝ GENERÁTOR (Web Audio API)
-        // -----------------------------------------------------------
-        let audioCtx = null;
-        function initAudio() {
-            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        }
-
-        function playGeigerSound() {
-            if (!audioCtx) return;
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(900 + Math.random() * 600, audioCtx.currentTime);
-            gain.gain.setValueAtTime(0.04, audioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.02);
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            osc.start();
-            osc.stop(audioCtx.currentTime + 0.02);
-        }
-
-        function playSonarPulse() {
-            if (!audioCtx) return;
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(440, audioCtx.currentTime);
-            osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.3);
-            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-            gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            osc.start();
-            osc.stop(audioCtx.currentTime + 0.3);
-        }
-
-        // -----------------------------------------------------------
-        // 2. INŠTALÁCIA: PRESNE 4 MINÚTY (240 SEKÚND) & 999 MB
-        // -----------------------------------------------------------
-        const totalDurationSec = 240; // 4 minúty
-        const totalMB = 999.0;
-        let elapsedSec = 0;
-
-        const terminalLogs = [
-            "Overovanie hardvérovej akcelerácie...",
-            "Alokácia spektro-optickej matice 1080p60...",
-            "Sťahovanie neurálneho balíka: neural_ghost_mesh_v5.bin",
-            "Kalibrácia prieniku cez tuhé prekážky (X-Ray Wall Penetration)...",
-            "Inštalácia sub-priestorových filtrov nočného videnia...",
-            "Synchronizácia LiDAR & Sonar frekvencií...",
-            "Ladenie ektoplazmatických anomálií...",
-            "Aktivácia Spirit-Box syntetizátora..."
-        ];
-
-        const installTimer = setInterval(() => {
-            elapsedSec += 0.5;
-            const progressRatio = Math.min(elapsedSec / totalDurationSec, 1);
-            
-            const currentMB = (progressRatio * totalMB).toFixed(2);
-            const currentPct = (progressRatio * 100).toFixed(1);
-
-            const remainingSec = Math.max(totalDurationSec - Math.floor(elapsedSec), 0);
-            const remMin = String(Math.floor(remainingSec / 60)).padStart(2, '0');
-            const remS = String(remainingSec % 60).padStart(2, '0');
-
-            document.getElementById('install-timer').innerText = `${remMin}:${remS}`;
-            document.getElementById('install-downloaded').innerText = `${currentMB} MB / 999.00 MB`;
-            document.getElementById('install-pct').innerText = `${currentPct}%`;
-            document.getElementById('install-bar').style.width = `${currentPct}%`;
-
-            // Pridávanie logov do terminálu
-            if (Math.random() > 0.7) {
-                const term = document.getElementById('install-terminal');
-                const log = terminalLogs[Math.floor(Math.random() * terminalLogs.length)];
-                const div = document.createElement('div');
-                div.innerText = `> [${remMin}:${remS}] ${log} (${(Math.random()*100).toFixed(0)}%)`;
-                term.appendChild(div);
-                term.scrollTop = term.scrollHeight;
-            }
-
-            if (progressRatio >= 1) {
-                clearInterval(installTimer);
-                document.getElementById('btn-start-auth').classList.remove('hidden');
-                document.getElementById('install-timer').innerText = "DOKONČENÉ";
-            }
-        }, 500);
-
-        document.getElementById('btn-start-auth').addEventListener('click', () => {
-            initAudio();
-            document.getElementById('screen-install').classList.add('hidden');
-            document.getElementById('screen-auth').classList.remove('hidden');
-        });
-
-        document.getElementById('btn-login-submit').addEventListener('click', async () => {
-            initAudio();
-            document.getElementById('screen-auth').classList.add('hidden');
-            document.getElementById('screen-scanner').classList.remove('hidden');
-            await startCamera();
-            initThreeJS();
-            startScannerLoops();
-        });
-
-        // -----------------------------------------------------------
-        // 3. KAMERA & FILTRE
-        // -----------------------------------------------------------
-        const video = document.getElementById('camera-stream');
-
-        async function startCamera() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
-                    audio: false
-                });
-                video.srcObject = stream;
-            } catch (err) {
-                console.warn("Kamera nedostupná, simuluje sa nočný obraz.", err);
-            }
-        }
-
-        function setFilter(filterClass) {
-            video.className = `absolute inset-0 w-full h-full object-cover transition-all duration-300 ${filterClass}`;
-        }
-
-        // -----------------------------------------------------------
-        // 4. 3D DUCHOVIA A MONŠTRÁ (THREE.JS)
-        // -----------------------------------------------------------
-        let scene, camera, renderer, ghostMesh, ghostCore;
-        let isGhostSpawned = false;
-
-        function initThreeJS() {
-            const canvas = document.getElementById('three-canvas');
-            scene = new THREE.Scene();
-            camera = new THREE.PerspectiveCamera(75, canvas.clientWidth / canvas.clientHeight, 0.1, 1000);
-            camera.position.z = 5;
-
-            renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
-            renderer.setSize(canvas.clientWidth, canvas.clientHeight);
-
-            // Zložité 3D monštrum: Icosahedron + Wireframe ektoplazma
-            const geo = new THREE.IcosahedronGeometry(1.3, 2);
-            const mat = new THREE.MeshBasicMaterial({ color: 0x22c55e, wireframe: true, transparent: true, opacity: 0 });
-            ghostMesh = new THREE.Mesh(geo, mat);
-            scene.add(ghostMesh);
-
-            const coreGeo = new THREE.SphereGeometry(0.6, 16, 16);
-            const coreMat = new THREE.MeshBasicMaterial({ color: 0xff0044, wireframe: true, transparent: true, opacity: 0 });
-            ghostCore = new THREE.Mesh(coreGeo, coreMat);
-            ghostMesh.add(ghostCore);
-
-            renderLoop();
-        }
-
-        function renderLoop() {
-            requestAnimationFrame(renderLoop);
-            if (ghostMesh && isGhostSpawned) {
-                ghostMesh.rotation.x += 0.02;
-                ghostMesh.rotation.y += 0.025;
-                ghostMesh.position.x = Math.sin(Date.now() * 0.002) * 1.2;
-                ghostMesh.position.y = Math.cos(Date.now() * 0.0018) * 0.8;
-            }
-            renderer.render(scene, camera);
-        }
-
-        function spawnGhost() {
-            if (isGhostSpawned) return;
-            isGhostSpawned = true;
-            playSonarPulse();
-
-            let op = 0;
-            const fadeIn = setInterval(() => {
-                op += 0.08;
-                ghostMesh.material.opacity = op;
-                ghostCore.material.opacity = op * 1.2;
-                if (op >= 0.9) {
-                    clearInterval(fadeIn);
-                    setTimeout(despawnGhost, 6000);
-                }
-            }, 40);
-
-            document.getElementById('spirit-sub').innerText = "VAROVANIE: ENTITA DETEKOVANÁ V MIESTNOSTI!";
-        }
-
-        function despawnGhost() {
-            let op = ghostMesh.material.opacity;
-            const fadeOut = setInterval(() => {
-                op -= 0.08;
-                ghostMesh.material.opacity = op;
-                ghostCore.material.opacity = op;
-                if (op <= 0) {
-                    clearInterval(fadeOut);
-                    ghostMesh.material.opacity = 0;
-                    ghostCore.material.opacity = 0;
-                    isGhostSpawned = false;
-                    document.getElementById('spirit-sub').innerText = "SKENUJE SA ÉTER...";
-                }
-            }, 40);
-        }
-
-        document.getElementById('btn-spawn').addEventListener('click', spawnGhost);
-
-        // -----------------------------------------------------------
-        // 5. PRIENIK CEZ STENY & RADAROVÉ SKENOVANIE
-        // -----------------------------------------------------------
-        let wallMode = true;
-        const btnToggleWall = document.getElementById('btn-toggle-wall');
-        const wallTarget1 = document.getElementById('wall-human-target');
-        const wallTarget2 = document.getElementById('wall-specter-target');
-
-        btnToggleWall.addEventListener('click', () => {
-            wallMode = !wallMode;
-            playSonarPulse();
-            if (wallMode) {
-                wallTarget1.classList.remove('hidden');
-                wallTarget2.classList.remove('hidden');
-                btnToggleWall.className = "flex flex-col items-center gap-1 text-emerald-400 active:scale-95 transition";
-                document.getElementById('wall-radar-status').innerText = "AKTÍVNY • 2 CIELE";
-            } else {
-                wallTarget1.classList.add('hidden');
-                wallTarget2.classList.add('hidden');
-                btnToggleWall.className = "flex flex-col items-center gap-1 text-zinc-600 active:scale-95 transition";
-                document.getElementById('wall-radar-status').innerText = "VYPNUTÝ";
-            }
-        });
-
-        // Automatické zobrazenie cieľov cez stenu
-        wallTarget1.classList.remove('hidden');
-        wallTarget2.classList.remove('hidden');
-
-        function startScannerLoops() {
-            setInterval(() => {
-                if (Math.random() > 0.6) playGeigerSound();
-            }, 500);
-        }
-
-        // -----------------------------------------------------------
-        // 6. NAHRÁVANIE VIDEA A STIAHNUTIE DO MOBILU
-        // -----------------------------------------------------------
         let mediaRecorder;
         let recordedChunks = [];
         let isRecording = false;
-        let recInterval;
-        let recSeconds = 0;
+        let recStartTime = 0;
+        let lastFrameTime = performance.now();
+        let frameCount = 0;
+        let fps = 60;
 
-        const btnRecord = document.getElementById('btn-record');
-        const recBtnCore = document.getElementById('rec-btn-core');
-        const recTimer = document.getElementById('rec-timer');
+        // Rozlíšenia
+        const resolutions = {
+            'yt-shorts': { w: 1080, h: 1920 },
+            '1080p': { w: 1920, h: 1080 },
+            '4k': { w: 3840, h: 2160 },
+            '720p': { w: 1280, h: 720 }
+        };
 
-        btnRecord.addEventListener('click', () => {
-            if (!isRecording) startRecording();
-            else stopRecording();
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 },
+                        frameRate: { ideal: 60 }
+                    },
+                    audio: true
+                });
+                video.srcObject = stream;
+                video.play();
+                updateCanvasResolution();
+                requestAnimationFrame(renderLoop);
+            } catch (err) {
+                alert("Chyba pri zapínaní kamery: " + err.message);
+            }
+        }
+
+        function updateCanvasResolution() {
+            const config = resolutions[resSelect.value];
+            canvas.width = config.w;
+            canvas.height = config.h;
+            resIndicator.innerText = `RES: ${config.w}x${config.h} @60FPS`;
+        }
+
+        resSelect.addEventListener('change', updateCanvasResolution);
+
+        gainSlider.addEventListener('input', () => {
+            gainIndicator.innerText = `LIGHT GAIN: +${Math.round(gainSlider.value * 100)}%`;
         });
 
-        async function startRecording() {
-            if (!video.srcObject) {
-                alert("Kamera nie je pripojená.");
-                return;
+        // Spracovanie obrazu & GLOW BIO/WALL algoritmus
+        function renderLoop(timestamp) {
+            frameCount++;
+            if (timestamp - lastFrameTime >= 1000) {
+                fps = frameCount;
+                frameCount = 0;
+                lastFrameTime = timestamp;
+                fpsCounter.innerText = `FPS: ${fps}`;
             }
 
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                // Vykreslenie videa do canvasu podľa vybraného formátu
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                let imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                let d = imgData.data;
+
+                let gain = parseFloat(gainSlider.value);
+                let glowIntensity = parseFloat(glowSlider.value) / 100;
+                let mode = modeSelect.value;
+
+                // Prechod cez pixely
+                for (let i = 0; i < d.length; i += 4) {
+                    let r = d[i];
+                    let g = d[i + 1];
+                    let b = d[i + 2];
+
+                    // Zosilnenie svetla v tme (Night Vision Boost)
+                    let brightness = (0.299 * r + 0.587 * g + 0.114 * b) * gain;
+                    
+                    // Simulácia šumu fotónov (Night Grain)
+                    let noise = (Math.random() - 0.5) * 25;
+                    brightness += noise;
+                    brightness = Math.min(255, Math.max(0, brightness));
+
+                    // Glow/Aura efekt na hranách/siluetách (Bio Aura)
+                    let edgeGlow = (r > 100 || g > 100 || b > 100) ? glowIntensity * 50 : 0;
+
+                    if (mode === 'night-green') {
+                        d[i] = edgeGlow * 0.2;                         // R
+                        d[i + 1] = brightness + edgeGlow;             // G (Silná zelená)
+                        d[i + 2] = edgeGlow * 0.4;                    // B
+                    } 
+                    else if (mode === 'white-phosphor') {
+                        d[i] = brightness * 0.85 + edgeGlow;
+                        d[i + 1] = brightness + edgeGlow;
+                        d[i + 2] = brightness * 1.15 + edgeGlow * 1.5; // Studená modro-biela
+                    } 
+                    else if (mode === 'thermal-predator') {
+                        // Termovízia FLIR (Ironbow)
+                        let heat = brightness + edgeGlow;
+                        d[i] = heat > 128 ? 255 : heat * 2;            // Red
+                        d[i + 1] = heat > 180 ? 255 : (heat > 80 ? heat : 0); // Yellow/Green
+                        d[i + 2] = heat < 128 ? 255 - heat * 2 : 0;   // Blue
+                    } 
+                    else if (mode === 'cyber-xray') {
+                        // Neónový fialovo-azúrový glow
+                        d[i] = (255 - brightness) * 0.5 + edgeGlow * 2;
+                        d[i + 1] = edgeGlow * 2;
+                        d[i + 2] = brightness + edgeGlow * 2.5;
+                    } 
+                    else if (mode === 'red-spec') {
+                        d[i] = brightness * 1.3 + edgeGlow * 2;
+                        d[i + 1] = 0;
+                        d[i + 2] = 0;
+                    }
+                }
+
+                ctx.putImageData(imgData, 0, 0);
+
+                // Neónový HUD overlay vykreslený priamo do videa (pre nahrávanie)
+                drawTacticalHUD();
+            }
+
+            if (isRecording) {
+                let elapsed = Math.floor((Date.now() - recStartTime) / 1000);
+                let mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
+                let secs = String(elapsed % 60).padStart(2, '0');
+                recTimer.innerText = `${mins}:${secs}`;
+            }
+
+            requestAnimationFrame(renderLoop);
+        }
+
+        // Kreslenie taktického radaru priamo do exportovaného videa
+        function drawTacticalHUD() {
+            ctx.strokeStyle = "rgba(0, 255, 100, 0.4)";
+            ctx.lineWidth = 2;
+            
+            // Rohové taktické zameriavače
+            const len = 40;
+            const w = canvas.width;
+            const h = canvas.height;
+
+            // TL
+            ctx.beginPath();
+            ctx.moveTo(30, 30 + len); ctx.lineTo(30, 30); ctx.lineTo(30 + len, 30);
+            // TR
+            ctx.moveTo(w - 30 - len, 30); ctx.lineTo(w - 30, 30); ctx.lineTo(w - 30, 30 + len);
+            // BL
+            ctx.moveTo(30, h - 30 - len); ctx.lineTo(30, h - 30); ctx.lineTo(30 + len, h - 30);
+            // BR
+            ctx.moveTo(w - 30 - len, h - 30); ctx.lineTo(w - 30, h - 30); ctx.lineTo(w - 30, h - 30 - len);
+            ctx.stroke();
+        }
+
+        // Nahrávanie videa
+        recBtn.addEventListener('click', () => {
+            if (!isRecording) {
+                startRecording();
+            } else {
+                stopRecording();
+            }
+        });
+
+        function startRecording() {
             recordedChunks = [];
-            try {
-                mediaRecorder = new MediaRecorder(video.srcObject, {
-                    mimeType: 'video/webm;codecs=vp9',
-                    videoBitsPerSecond: 8000000 // Vysoká kvalita
-                });
+            const stream = canvas.captureStream(60); // 60 FPS Stream
 
-                mediaRecorder.ondataavailable = (e) => {
-                    if (e.data.size > 0) recordedChunks.push(e.data);
-                };
-
-                mediaRecorder.onstop = saveVideo;
-                mediaRecorder.start();
-
-                isRecording = true;
-                recBtnCore.className = "w-14 h-14 bg-red-600 rounded-lg flex items-center justify-center animate-pulse";
-                recTimer.classList.remove('hidden');
-                recSeconds = 0;
-
-                recInterval = setInterval(() => {
-                    recSeconds++;
-                    const m = String(Math.floor(recSeconds / 60)).padStart(2, '0');
-                    const s = String(recSeconds % 60).padStart(2, '0');
-                    recTimer.innerText = `${m}:${s}`;
-                }, 1000);
-
-            } catch (err) {
-                alert("Váš prehliadač vyžaduje HTTPS alebo lokálny server pre nahrávanie.");
+            // Pridanie mikrofónu do záznamu
+            if (video.srcObject && video.srcObject.getAudioTracks().length > 0) {
+                stream.addTrack(video.srcObject.getAudioTracks()[0]);
             }
+
+            let options = { mimeType: 'video/webm; codecs=vp9' };
+            if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                options = { mimeType: 'video/webm' };
+            }
+
+            mediaRecorder = new MediaRecorder(stream, options);
+
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) recordedChunks.push(e.data);
+            };
+
+            mediaRecorder.onstop = saveVideo;
+
+            mediaRecorder.start(100);
+            isRecording = true;
+            recStartTime = Date.now();
+            recBtn.classList.add('recording');
+            recBtn.innerText = "⏹ ZASTAVIŤ A ULOŽIŤ";
+            recStatus.style.display = "block";
         }
 
         function stopRecording() {
             mediaRecorder.stop();
             isRecording = false;
-            clearInterval(recInterval);
-            recBtnCore.className = "w-14 h-14 bg-red-600 rounded-full flex items-center justify-center shadow-lg shadow-red-600/50";
-            recTimer.classList.add('hidden');
+            recBtn.classList.remove('recording');
+            recBtn.innerText = "⏺ SPUSTIŤ NAHRÁVANIE";
+            recStatus.style.display = "none";
         }
 
         function saveVideo() {
-            const blob = new Blob(recordedChunks, { type: 'video/mp4' });
+            const blob = new Blob(recordedChunks, { type: 'video/webm' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.style.display = 'none';
             a.href = url;
-            a.download = `SPECTER_NIGHT_VISION_${Date.now()}.mp4`;
+            a.download = `NIGHT_VISION_${resSelect.value}_${Date.now()}.webm`;
             document.body.appendChild(a);
             a.click();
             setTimeout(() => {
@@ -646,13 +479,7 @@
             }, 100);
         }
 
-        // -----------------------------------------------------------
-        // 7. NASTAVENIA MODAL
-        // -----------------------------------------------------------
-        const modalSettings = document.getElementById('modal-settings');
-        document.getElementById('btn-open-settings').addEventListener('click', () => modalSettings.classList.remove('hidden'));
-        document.getElementById('btn-close-settings').addEventListener('click', () => modalSettings.classList.add('hidden'));
-        document.getElementById('btn-save-settings').addEventListener('click', () => modalSettings.classList.add('hidden'));
+        window.addEventListener('load', initCamera);
     </script>
 </body>
 </html>
